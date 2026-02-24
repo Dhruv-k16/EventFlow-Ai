@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. ENUMS
+// ==========================================
+
+enum UserRole {
+  VENDOR
+  PLANNER
+  CLIENT
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING    // Inquiry stage, items may be "held" temporarily
+  CONFIRMED  // Contracted, stock is officially deducted from availability
+  CANCELLED  // Stock released back to pool
+  COMPLETED  // Event concluded
+}
+
+enum StaffStatus {
+  AVAILABLE
+  ON_SITE
+  ON_LEAVE
+}
+
+// ==========================================
+// 2. CORE MODELS (Users & Roles)
+// ==========================================
+
+model User {
+  id            String   @id @default(uuid())
+  externalId    String   @unique // Auth0/Firebase ID
+  email         String   @unique
+  role          UserRole @default(CLIENT)
+  firstName     String?
+  lastName      String?
+  
+  // Relations
+  vendorProfile Vendor?  @relation("UserToVendor")
+  eventsOwned   Event[]  @relation("ClientEvents")
+  eventsPlanned Event[]  @relation("PlannerEvents")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([email, role])
+}
+
+model Vendor {
+  id            String   @id @default(uuid())
+  businessName  String
+  category      String   // e.g., "Catering", "Furniture"
+  userId        String   @unique
+  user          User     @relation("UserToVendor", fields: [userId], references: [id])
+  
+  // Domain Relations
+  inventory     InventoryItem[]
+  bookings      Booking[]
+  staff         Staff[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ==========================================
+// 3. INVENTORY SYSTEM (Vendor-Centric)
+// ==========================================
+
+model InventoryItem {
+  id            String   @id @default(uuid())
+  vendorId      String
+  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  
+  name          String
+  description   String?
+  totalQuantity Int      // The master warehouse count
+  basePrice     Decimal  @db.Decimal(12, 2)
+  
+  // Availability tracking
+  dailyAvailability InventoryAvailability[]
+  bookingItems      BookingItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([vendorId, name])
+}
+
+// This model prevents overbooking by tracking daily snapshots.
+// Logic: (InventoryItem.totalQuantity - bookedQty) = Available for a specific day.
+model InventoryAvailability {
+  id              String        @id @default(uuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  
+  date            DateTime
+  bookedQty       Int           @default(0) // Quantity officially committed to CONFIRMED bookings
+  holdQty         Int           @default(0) // Quantity currently in PENDING inquiries
+
+  @@unique([inventoryItemId, date])
+  @@index([date])
+}
+
+// ==========================================
+// 4. EVENT & BOOKING SYSTEM
+// ==========================================
+
+model Event {
+  id          String   @id @default(uuid())
+  name        String
+  date        DateTime
+  location    String?
+  eventType   String?  // e.g., "Wedding", "Corporate"
+  
+  // Ownership
+  clientId    String
+  client      User     @relation("ClientEvents", fields: [clientId], references: [id])
+  plannerId   String?
+  planner     User?    @relation("PlannerEvents", fields: [plannerId], references: [id])
+  
+  bookings    Booking[]
+  staffAssignments StaffAssignment[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date, clientId])
+}
+
+model Booking {
+  id          String        @id @default(uuid())
+  status      BookingStatus @default(PENDING)
+  
+  eventId     String
+  event       Event         @relation(fields: [eventId], references: [id])
+  
+  vendorId    String
+  vendor      Vendor        @relation(fields: [vendorId], references: [id])
+  
+  // Line items for this specific booking
+  items       BookingItem[]
+  
+  // Financials per booking
+  totalCost   Decimal       @default(0) @db.Decimal(12, 2)
+  depositPaid Decimal       @default(0) @db.Decimal(12, 2)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([vendorId, status])
+  @@index([eventId])
+}
+
+model BookingItem {
+  id              String        @id @default(uuid())
+  bookingId       String
+  booking         Booking       @relation(fields: [bookingId], references: [id])
+  
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  
+  quantity        Int
+  priceAtBooking  Decimal       @db.Decimal(12, 2) // Captured at time of booking to protect against price changes
+}
+
+// ==========================================
+// 5. STAFF SYSTEM
+// ==========================================
+
+model Staff {
+  id          String      @id @default(uuid())
+  vendorId    String
+  vendor      Vendor      @relation(fields: [vendorId], references: [id])
+  
+  name        String
+  role        String      // e.g., "Lead Server", "AV Technician"
+  wage        Decimal     @db.Decimal(10, 2)
+  status      StaffStatus @default(AVAILABLE)
+  
+  assignments StaffAssignment[]
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model StaffAssignment {
+  id        String   @id @default(uuid())
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id])
+  
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id])
+  
+  startTime DateTime
+  endTime   DateTime
+
+  @@index([staffId, startTime, endTime])
+}
+
+// ==========================================
+// 6. ANALYTICS & RISK FOUNDATION (AI READY)
+// ==========================================
+
+model RiskSnapshot {
+  id          String   @id @default(uuid())
+  targetId    String   // Can be EventId or VendorId
+  targetType  String   // "EVENT" or "VENDOR"
+  
+  riskScore   Int      // 0-100
+  factors     Json     // Structured AI explanations: { "overbooking": true, "budget_overrun": false }
+  
+  createdAt   DateTime @default(now())
+}
+
+model FinancialSummary {
+  id            String   @id @default(uuid())
+  referenceId   String   @unique // EventId
+  
+  totalRevenue  Decimal  @db.Decimal(12, 2)
+  totalCosts    Decimal  @db.Decimal(12, 2)
+  projectedProfit Decimal @db.Decimal(12, 2)
+  
+  updatedAt     DateTime @updatedAt
+}
