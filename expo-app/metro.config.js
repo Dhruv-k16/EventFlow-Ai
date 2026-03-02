@@ -1,22 +1,20 @@
-const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
+const { getDefaultConfig } = require(
+  path.resolve(__dirname, '../node_modules/expo/metro-config')
+);
 
-const config = getDefaultConfig(__dirname);
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = __dirname;
+const workspaceRoot = path.resolve(projectRoot, '..');
 
-// 1. Force Metro to resolve from the root node_modules
+const config = getDefaultConfig(projectRoot);
+
+config.watchFolders = [workspaceRoot];
+
 config.resolver.nodeModulesPaths = [
+  path.resolve(workspaceRoot, 'node_modules'),
   path.resolve(projectRoot, 'node_modules'),
 ];
 
-// 2. Watch the root for shared code and services
-config.watchFolders = [
-  projectRoot,
-  path.resolve(projectRoot, 'shared'),
-  path.resolve(projectRoot, 'services'),
-];
-
-// 3. Block backend routes
 config.resolver.blockList = [
   /src\/app\/api\/.*/,
   /node_modules\/next\/.*/,

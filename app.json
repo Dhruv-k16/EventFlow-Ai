@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "EventFlow AI",
+    "slug": "eventflow-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "eventflow",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "icon": "./expo-app/assets/images/icon.png",
+    "splash": {
+      "image": "./expo-app/assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4f46e5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eventflow.ai"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./expo-app/assets/images/android-icon-foreground.png",
+        "backgroundImage": "./expo-app/assets/images/android-icon-background.png",
+        "monochromeImage": "./expo-app/assets/images/android-icon-monochrome.png"
+      },
+      "package": "com.eventflow.ai"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "./expo-app/app"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

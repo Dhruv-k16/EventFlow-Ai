@@ -43,10 +43,13 @@
     ".next/types/**/*.ts",
     "shared/types.ts",
     "prisma/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ],
   "exclude": [
     "node_modules",
     "expo-app"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }

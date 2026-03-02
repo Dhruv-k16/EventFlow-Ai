@@ -1,6 +1,6 @@
 {
-    "name": "eventflow-mobile",
-    "version": "1.0.0",
-    "main": "../node_modules/expo-router/entry",
-    "dependencies": {}
-  }
+  "name": "eventflow-mobile",
+  "version": "1.0.0",
+  "main": "expo-app/app/index.tsx",
+  "dependencies": {}
+}
