@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { DataService } from '../../services/dataStore';
-import SharedTimeline from '../components/SharedTimeline';
+import { DataService } from '../../../services/dataStore'; // ✅ Fixed: was ../../services/
+import SharedTimeline from '../../components/SharedTimeline'; // ✅ Fixed: was ../components/
 
 export default function VendorTimelineScreen() {
   const [events, setEvents] = useState(DataService.getEvents());
@@ -13,10 +13,10 @@ export default function VendorTimelineScreen() {
   if (!activeEvent) return null;
 
   return (
-    <SharedTimeline 
-      items={activeEvent.timeline || []} 
+    <SharedTimeline
+      items={activeEvent.timeline || []}
       eventId={activeEvent.id}
-      canEdit={true} 
+      canEdit={true}
       onRefresh={refreshData}
     />
   );

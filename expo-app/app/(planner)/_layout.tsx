@@ -3,7 +3,7 @@ import { Tabs } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AIFloatingButton from '../components/AIFloatingButton';
+import AIFloatingButton from '../../components/AIFloatingButton'; // ✅ Fixed: was ../components/
 
 export default function PlannerLayout() {
   const { colorScheme } = useColorScheme();
@@ -12,12 +12,12 @@ export default function PlannerLayout() {
     <SafeAreaProvider>
       <View style={{ flex: 1 }}>
         <Tabs screenOptions={{
-          tabBarActiveTintColor: '#4f46e5', // Indigo-600
+          tabBarActiveTintColor: '#4f46e5',
           tabBarInactiveTintColor: '#94a3b8',
-          headerShown: false, 
-          tabBarStyle: { 
-            height: 70, 
-            paddingBottom: 12, 
+          headerShown: false,
+          tabBarStyle: {
+            height: 70,
+            paddingBottom: 12,
             paddingTop: 8,
             backgroundColor: colorScheme === 'dark' ? '#0f172a' : '#ffffff',
             borderTopColor: colorScheme === 'dark' ? '#1e293b' : '#f1f5f9',
@@ -38,7 +38,6 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="grid" size={24} color={color} />,
             }}
           />
-
           <Tabs.Screen
             name="timeline"
             options={{
@@ -46,7 +45,6 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="list" size={24} color={color} />,
             }}
           />
-
           <Tabs.Screen
             name="create-event"
             options={{
@@ -54,7 +52,6 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="add-circle" size={24} color={color} />,
             }}
           />
-
           <Tabs.Screen
             name="events"
             options={{
@@ -62,7 +59,6 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="calendar" size={24} color={color} />,
             }}
           />
-
           <Tabs.Screen
             name="staff"
             options={{
@@ -70,7 +66,6 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="people" size={24} color={color} />,
             }}
           />
-
           <Tabs.Screen
             name="settings"
             options={{
@@ -78,17 +73,19 @@ export default function PlannerLayout() {
               tabBarIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} />,
             }}
           />
-
-          {/* Hide event-detail from the bottom tab bar */}
+          <Tabs.Screen
+            name="marketplace"
+            options={{
+              title: 'Marketplace',
+              tabBarIcon: ({ color }) => <Ionicons name="storefront-outline" size={24} color={color} />,
+            }}
+          />
           <Tabs.Screen
             name="event-detail"
-            options={{
-              href: null,
-            }}
+            options={{ href: null }}
           />
         </Tabs>
 
-        {/* This component stays visible across all planner tabs */}
         <AIFloatingButton />
       </View>
     </SafeAreaProvider>

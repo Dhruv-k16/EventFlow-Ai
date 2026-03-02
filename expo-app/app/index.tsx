@@ -1,61 +1,59 @@
+// expo-app/app/index.tsx
+// Auth gate — the first screen the app loads.
+// Checks for a stored session. If found, routes to the correct role dashboard.
+// If no session, redirects to login.
+
 import { Redirect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store'; // Ensure this is installed
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import type { StoredSession } from '../../shared/types';
+import { getSession } from '../services/authService';
 
 export default function RootIndex() {
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession]   = useState<StoredSession | null>(null);
+  const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
-    async function checkAuthStatus() {
-      try {
-        // Look for a saved role in the phone's secure storage
-        const savedRole = await SecureStore.getItemAsync('userRole');
-        
-        if (savedRole) {
-          setUserRole(savedRole);
-        }
-      } catch (error) {
-        console.error("Error checking auth status:", error);
-      } finally {
-        // Small delay to ensure smooth transition
-        setTimeout(() => setIsLoading(false), 500);
-      }
-    }
-
-    checkAuthStatus();
+    getSession()
+      .then(setSession)
+      .catch(() => setSession(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
+      <View className="flex-1 items-center justify-center bg-slate-50">
+        <View className="bg-indigo-600 w-16 h-16 rounded-3xl items-center justify-center mb-6">
+          <Text className="text-white text-3xl font-black">⚡</Text>
+        </View>
         <ActivityIndicator size="large" color="#4f46e5" />
       </View>
     );
   }
 
-  // 1. If no role is found in storage, send to Login
-  if (!userRole) {
-    return <Redirect href={"/(auth)/login" as any}  />;
-  }
-  // 2. Traffic Control: Redirect based on the role found in storage
-  // Note: 'as any' is used to bypass temporary TS path generation lag
-  // app/index.tsx
-  if (userRole === 'planner') {
-    return <Redirect href={"/dashboard" as any} />;
+  // No session → login
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
   }
 
-  if (userRole === 'vendor') {
-    // Point to the specific unique filename
-    return <Redirect href={"/vendor-dashboard"as any} />;
+  // Route to the correct role dashboard
+  const role = session.user.role;
+
+  if (role === 'PLANNER') {
+    return <Redirect href="/(planner)/dashboard" />;
   }
 
-  if (userRole === 'client') {
-    // Point to the specific unique filename
-    return <Redirect href={"/client-dashboard" as any} />;
+  if (role === 'VENDOR') {
+    return <Redirect href="/(vendor)/vendor-dashboard" />;
   }
 
-  // Fallback (e.g. if storage is corrupted)
-  return <Redirect href={"/(auth)/login" as any} />;
+  if (role === 'CLIENT') {
+    return <Redirect href="/(client)/home" />;
+  }
+
+  if (role === 'ADMIN') {
+    return <Redirect href="/(planner)/dashboard" />;
+  }
+
+  return <Redirect href="/(auth)/login" />;
 }

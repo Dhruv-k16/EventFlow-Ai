@@ -1,132 +1,147 @@
+// expo-app/app/(auth)/login.tsx
+// Real login screen — calls POST /api/auth/login.
+// Role is returned from the server (not selected by the user at login).
+
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useState } from 'react';
-import { Alert, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AuthService } from '../../../services/dataStore';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { AuthService } from '../../services/authService';
 
-export default function Login() {
+export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'Planner' | 'Vendor' | 'Client'>('Planner');
-  const [forgotModal, setForgotModal] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
+
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading,  setLoading]  = useState(false);
 
   const handleLogin = async () => {
-    if (!email) {
-      Alert.alert("Error", "Please enter your email");
+    if (!email.trim() || !password) {
+      Alert.alert('Missing fields', 'Please enter your email and password.');
       return;
     }
 
-    const user = AuthService.login(email, role);
+    setLoading(true);
+    try {
+      const { user } = await AuthService.login(email.trim().toLowerCase(), password);
 
-    if (user) {
-      const rolePath = role.toLowerCase().trim();
-      await SecureStore.setItemAsync('userRole', rolePath);
-      
-      // MATCH THE FILENAMES IN YOUR IMAGE:
-      if (rolePath === 'vendor') {
-        router.replace('../(vendor)/vendor-dashboard'); // Matches your file vendor-dashboard.tsx
-      } else if (rolePath === 'client') {
-        router.replace('../(client)/client-dashboard'); // Matches your file client-dashboard.tsx
+      // Route to correct dashboard based on role from server
+      if (user.role === 'VENDOR') {
+        router.replace('/(vendor)/vendor-dashboard');
+      } else if (user.role === 'CLIENT') {
+        router.replace('/(client)/home');
       } else {
-        router.replace('../(planner)/dashboard'); // Matches your file dashboard.tsx
+        // PLANNER or ADMIN
+        router.replace('/(planner)/dashboard');
       }
-    } else {
-      Alert.alert("Login Failed", "Invalid credentials or role selection.");
-    }
-  };
-
-  const handleReset = () => {
-    const result = AuthService.resetPassword(resetEmail);
-    if (result.success) {
-      Alert.alert("Email Sent", "Check your inbox for password reset instructions.");
-      setForgotModal(false);
-    } else {
-      Alert.alert("Error", result.message);
+    } catch (err: any) {
+      Alert.alert('Login failed', err.message ?? 'Invalid email or password.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 p-6 bg-white dark:bg-slate-900 justify-center">
-      <View className="items-center mb-10">
-        <View className="bg-indigo-600 p-4 rounded-3xl mb-4">
-          <Ionicons name="flash" size={40} color="white" />
-        </View>
-        <Text className="text-3xl font-bold dark:text-white">EventFlow AI</Text>
-        <Text className="text-slate-500 mt-2">Sign in to your workspace</Text>
-      </View>
-
-      {/* Role Selector Tabs */}
-      <View className="flex-row bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl mb-6">
-        {['Planner', 'Vendor', 'Client'].map((r) => (
-          <TouchableOpacity 
-            key={r}
-            onPress={() => setRole(r as any)}
-            className={`flex-1 py-3 rounded-xl ${role === r ? 'bg-white dark:bg-slate-700 shadow-sm' : ''}`}
-          >
-            <Text className={`text-center font-bold ${role === r ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-400'}`}>
-              {r}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Inputs */}
-      <View className="space-y-4">
-        <TextInput 
-          placeholder="Email Address" 
-          placeholderTextColor="#94a3b8"
-          value={email} 
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 dark:text-white"
-        />
-
-        <TouchableOpacity 
-          onPress={handleLogin}
-          className="bg-indigo-600 p-4 rounded-2xl items-center shadow-lg shadow-indigo-200"
+    <SafeAreaView className="flex-1 bg-white dark:bg-slate-900" edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text className="text-white font-bold text-lg">Continue as {role}</Text>
-        </TouchableOpacity>
+          <View className="flex-1 px-6 justify-center">
 
-        <TouchableOpacity onPress={() => setForgotModal(true)} className="items-center pt-2">
-          <Text className="text-indigo-600 dark:text-indigo-400 font-semibold">Forgot Password?</Text>
-        </TouchableOpacity>
-      </View>
+            {/* Logo */}
+            <View className="items-center mb-10">
+              <View className="bg-indigo-600 w-20 h-20 rounded-3xl items-center justify-center mb-4 shadow-lg shadow-indigo-300">
+                <Ionicons name="flash" size={40} color="white" />
+              </View>
+              <Text className="text-3xl font-black text-slate-900 dark:text-white">EventFlow AI</Text>
+              <Text className="text-slate-500 dark:text-slate-400 mt-1">Sign in to your workspace</Text>
+            </View>
 
-      {/* Forgot Password Modal */}
-      <Modal visible={forgotModal} animationType="slide" transparent={true}>
-        <View className="flex-1 bg-black/50 justify-center p-6">
-          <View className="bg-white dark:bg-slate-800 p-8 rounded-3xl">
-            <Text className="text-2xl font-bold dark:text-white mb-2">Reset Password</Text>
-            <Text className="text-slate-500 mb-6">Enter your email and we'll send you a recovery link.</Text>
-            
-            <TextInput 
-              placeholder="Email Address" 
-              value={resetEmail}
-              onChangeText={setResetEmail}
-              className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 mb-6"
-            />
-            
-            <View className="flex-row space-x-3">
-              <TouchableOpacity onPress={() => setForgotModal(false)} className="flex-1 bg-slate-100 p-4 rounded-2xl items-center">
-                <Text className="font-bold text-slate-600">Cancel</Text>
+            {/* Form */}
+            <View className="space-y-4">
+
+              {/* Email */}
+              <View>
+                <Text className="text-slate-600 dark:text-slate-300 font-semibold mb-2 text-sm">Email Address</Text>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-4 text-slate-900 dark:text-white"
+                />
+              </View>
+
+              {/* Password */}
+              <View>
+                <Text className="text-slate-600 dark:text-slate-300 font-semibold mb-2 text-sm">Password</Text>
+                <View className="flex-row items-center bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4">
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94a3b8"
+                    secureTextEntry={!showPass}
+                    autoComplete="password"
+                    className="flex-1 py-4 text-slate-900 dark:text-white"
+                  />
+                  <TouchableOpacity onPress={() => setShowPass(p => !p)} className="p-1">
+                    <Ionicons
+                      name={showPass ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="#94a3b8"
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Sign In button */}
+              <TouchableOpacity
+                onPress={handleLogin}
+                disabled={loading}
+                className="bg-indigo-600 rounded-2xl py-4 items-center mt-2 shadow-lg shadow-indigo-200"
+              >
+                {loading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-base">Sign In</Text>
+                )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleReset} className="flex-1 bg-indigo-600 p-4 rounded-2xl items-center">
-                <Text className="font-bold text-white">Send Link</Text>
+
+            </View>
+
+            {/* Footer */}
+            <View className="flex-row justify-center mt-8">
+              <Text className="text-slate-500 dark:text-slate-400">New to EventFlow? </Text>
+              <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+                <Text className="text-indigo-600 dark:text-indigo-400 font-bold">Create Account</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
 
-      <View className="flex-row justify-center mt-12">
-        <Text className="text-slate-500">New to EventFlow? </Text>
-        <TouchableOpacity onPress={() => router.push('/(auth)/signup' as any)}>
-          <Text className="text-indigo-600 font-bold">Create Account</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

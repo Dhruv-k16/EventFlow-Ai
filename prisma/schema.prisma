@@ -1,5 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================================
+// EventFlow AI — Prisma Schema v2.0
+// Aligned with SRS: Meeting-driven, Capacity-based, Multi-day
+// ============================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -10,9 +12,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==========================================
-// 1. ENUMS
-// ==========================================
+// ============================================================
+// ENUMS
+// ============================================================
 
 enum UserRole {
   VENDOR
@@ -21,11 +23,23 @@ enum UserRole {
   ADMIN
 }
 
+// SRS-aligned meeting-driven booking lifecycle
 enum BookingStatus {
-  PENDING    // Inquiry stage, items may be "held" temporarily
-  CONFIRMED  // Contracted, stock is officially deducted from availability
-  CANCELLED  // Stock released back to pool
-  COMPLETED  // Event concluded
+  REQUESTED            // Client/Planner submitted a booking request
+  MEETING_PHASE_1      // Initial discovery meeting scheduled
+  CONFIRMATION_PENDING // Vendor has seen request, awaiting their action
+  MEETING_PHASE_2      // Final details meeting scheduled
+  CONFIRMED            // Fully contracted — inventory allocated HERE
+  REJECTED_CAPACITY    // Vendor cannot accommodate (capacity/inventory)
+  CANCELLED            // Cancelled by any party — inventory released
+  COMPLETED            // Event concluded successfully
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
 }
 
 enum StaffStatus {
@@ -34,202 +48,386 @@ enum StaffStatus {
   ON_LEAVE
 }
 
-// ==========================================
-// 2. CORE MODELS (Users & Roles)
-// ==========================================
+// SRS: Real-time task tracking statuses
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DELAYED
+}
+
+// ============================================================
+// CORE: USER & AUTH
+// ============================================================
 
 model User {
-  id            String   @id @default(uuid())
-  externalId    String   @unique // Auth0/Firebase ID
-  email         String   @unique
-  role          UserRole @default(CLIENT)
-  firstName     String?
-  lastName      String?
-  
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   // bcrypt hash — no plaintext ever stored
+  firstName    String
+  lastName     String
+  role         UserRole @default(CLIENT)
+  isActive     Boolean  @default(true)
+
   // Relations
-  vendorProfile Vendor?  @relation("UserToVendor")
-  eventsOwned   Event[]  @relation("ClientEvents")
-  eventsPlanned Event[]  @relation("PlannerEvents")
+  refreshTokens  RefreshToken[]
+  vendorProfile  Vendor?         @relation("UserToVendor")
+  plannerProfile PlannerProfile? @relation("UserToPlanner")
+  clientEvents   Event[]         @relation("ClientEvents")
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([email, role])
+  @@index([email])
+  @@index([role])
 }
+
+// Refresh tokens stored in DB so we can invalidate them (logout, compromise)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique // The actual JWT refresh token string
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ============================================================
+// PLANNER PROFILE
+// ============================================================
+
+model PlannerProfile {
+  id             String @id @default(uuid())
+  userId         String @unique
+  user           User   @relation("UserToPlanner", fields: [userId], references: [id])
+
+  businessName   String?
+  // SRS: Planners also have capacity — how many events can they manage per day
+  maxEventsPerDay Int    @default(3)
+  bio            String?
+  yearsExperience Int?
+
+  // Events this planner manages
+  managedEvents  Event[] @relation("PlannerEvents")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// VENDOR PROFILE
+// ============================================================
 
 model Vendor {
-  id            String   @id @default(uuid())
+  id           String @id @default(uuid())
+  userId       String @unique
+  user         User   @relation("UserToVendor", fields: [userId], references: [id])
+
   businessName  String
-  category      String   // e.g., "Catering", "Furniture"
-  userId        String   @unique
-  user          User     @relation("UserToVendor", fields: [userId], references: [id])
-  
-  // Domain Relations
-  inventory     InventoryItem[]
-  bookings      Booking[]
-  staff         Staff[]
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  category      String  // e.g., "Catering", "Furniture", "Photography"
+  description   String?
+  // SRS core: "Capable of handling X events per day effectively"
+  maxEventsPerDay Int   @default(2)
+  rating        Decimal @default(0) @db.Decimal(3, 2)
+  location      String?
+
+  // Relations
+  inventory         InventoryItem[]
+  bookings          Booking[]
+  staff             Staff[]
+  availabilityBlocks VendorAvailabilityBlock[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
 }
 
-// ==========================================
-// 3. INVENTORY SYSTEM (Vendor-Centric)
-// ==========================================
+// Vendor can manually block out dates (vacation, maintenance, etc.)
+model VendorAvailabilityBlock {
+  id        String   @id @default(uuid())
+  vendorId  String
+  vendor    Vendor   @relation(fields: [vendorId], references: [id])
+
+  startDate DateTime
+  endDate   DateTime
+  reason    String?  // e.g., "Annual maintenance", "Staff training"
+
+  createdAt DateTime @default(now())
+
+  @@index([vendorId, startDate, endDate])
+}
+
+// ============================================================
+// INVENTORY SYSTEM
+// ============================================================
 
 model InventoryItem {
-  id            String   @id @default(uuid())
-  vendorId      String
-  vendor        Vendor   @relation(fields: [vendorId], references: [id])
-  
+  id          String  @id @default(uuid())
+  vendorId    String
+  vendor      Vendor  @relation(fields: [vendorId], references: [id])
+
   name          String
   description   String?
-  totalQuantity Int      // The master warehouse count
-  basePrice     Decimal  @db.Decimal(12, 2)
-  
-  // Availability tracking
-  dailyAvailability InventoryAvailability[]
-  bookingItems      BookingItem[]
+  totalQuantity Int
+  basePrice     Decimal @db.Decimal(12, 2)
+  unit          String  @default("per unit") // e.g. "per day", "per hour", "per piece"
+  imageUrl      String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  // SRS: No holdQty. Allocation happens ONLY when status = CONFIRMED.
+  // This tracks only confirmed bookings per date.
+  dailyAllocations InventoryAllocation[]
+  bookingItems     BookingItem[]
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
   @@index([vendorId, name])
 }
 
-// This model prevents overbooking by tracking daily snapshots.
-// Logic: (InventoryItem.totalQuantity - bookedQty) = Available for a specific day.
-model InventoryAvailability {
+// SRS: "Inventory allocation happens ONLY when status = CONFIRMED"
+// No soft-locks, no holdQty — clean confirmed-only model
+model InventoryAllocation {
   id              String        @id @default(uuid())
   inventoryItemId String
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  
-  date            DateTime
-  bookedQty       Int           @default(0) // Quantity officially committed to CONFIRMED bookings
-  holdQty         Int           @default(0) // Quantity currently in PENDING inquiries
+
+  date       DateTime
+  // Only confirmed/active bookings count against this
+  allocatedQty Int @default(0)
 
   @@unique([inventoryItemId, date])
   @@index([date])
 }
 
-// ==========================================
-// 4. EVENT & BOOKING SYSTEM
-// ==========================================
+// ============================================================
+// EVENT SYSTEM
+// ============================================================
 
 model Event {
-  id          String   @id @default(uuid())
-  name        String
-  date        DateTime
+  id        String @id @default(uuid())
+  name      String
+  eventType String? // "Wedding", "Corporate", "Private", "Concert"
+
+  // SRS: Multi-day event support
+  startDate  DateTime
+  endDate    DateTime
+  isMultiDay Boolean  @default(false)
+
   location    String?
-  eventType   String?  // e.g., "Wedding", "Corporate"
-  
+  guestCount  Int?
+  description String?
+
   // Ownership
-  clientId    String
-  client      User     @relation("ClientEvents", fields: [clientId], references: [id])
-  plannerId   String?
-  planner     User?    @relation("PlannerEvents", fields: [plannerId], references: [id])
-  
-  bookings    Booking[]
+  clientId   String
+  client     User           @relation("ClientEvents", fields: [clientId], references: [id])
+  plannerId  String?
+  planner    PlannerProfile? @relation("PlannerEvents", fields: [plannerId], references: [id])
+
+  // Relations
+  bookings         Booking[]
   staffAssignments StaffAssignment[]
+  liveEvent        LiveEvent?
+  riskSnapshots    RiskSnapshot[]
+  financialSummary FinancialSummary?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([date, clientId])
+  @@index([startDate])
+  @@index([clientId])
+  @@index([plannerId])
 }
 
-model Booking {
-  id          String        @id @default(uuid())
-  status      BookingStatus @default(PENDING)
-  
-  eventId     String
-  event       Event         @relation(fields: [eventId], references: [id])
-  
-  vendorId    String
-  vendor      Vendor        @relation(fields: [vendorId], references: [id])
-  
-  // Line items for this specific booking
-  items       BookingItem[]
-  
-  // Financials per booking
-  totalCost   Decimal       @default(0) @db.Decimal(12, 2)
-  depositPaid Decimal       @default(0) @db.Decimal(12, 2)
+// ============================================================
+// BOOKING & MEETING LIFECYCLE
+// ============================================================
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+model Booking {
+  id      String        @id @default(uuid())
+  status  BookingStatus @default(REQUESTED)
+
+  eventId  String
+  event    Event  @relation(fields: [eventId], references: [id])
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  // The items being booked
+  items BookingItem[]
+
+  // Meeting records for this booking (Phase 1 + Phase 2)
+  meetings MeetingRecord[]
+
+  // Financials — computed from BookingItems on CONFIRMED
+  totalCost   Decimal @default(0) @db.Decimal(12, 2)
+  depositPaid Decimal @default(0) @db.Decimal(12, 2)
+
+  // Internal notes visible to planner/vendor
+  notes String?
+
+  // Rejection reason (set when REJECTED_CAPACITY)
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([vendorId, status])
   @@index([eventId])
+  @@index([status])
 }
 
 model BookingItem {
-  id              String        @id @default(uuid())
-  bookingId       String
-  booking         Booking       @relation(fields: [bookingId], references: [id])
-  
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
   inventoryItemId String
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  
-  quantity        Int
-  priceAtBooking  Decimal       @db.Decimal(12, 2) // Captured at time of booking to protect against price changes
+
+  quantity       Int
+  // Price captured at booking creation time — protected from future price changes
+  priceAtBooking Decimal @db.Decimal(12, 2)
+
+  @@index([bookingId])
+  @@index([inventoryItemId])
 }
 
-// ==========================================
-// 5. STAFF SYSTEM
-// ==========================================
+// SRS: Meetings are mandatory steps in the booking lifecycle
+model MeetingRecord {
+  id        String @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  // Which phase this meeting belongs to
+  phase         Int           // 1 = MEETING_PHASE_1, 2 = MEETING_PHASE_2
+  status        MeetingStatus @default(SCHEDULED)
+  scheduledAt   DateTime
+  completedAt   DateTime?
+  meetingLink   String?       // Video call URL
+  notes         String?       // Post-meeting notes / action items
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+}
+
+// ============================================================
+// STAFF SYSTEM
+// ============================================================
 
 model Staff {
-  id          String      @id @default(uuid())
-  vendorId    String
-  vendor      Vendor      @relation(fields: [vendorId], references: [id])
-  
-  name        String
-  role        String      // e.g., "Lead Server", "AV Technician"
-  wage        Decimal     @db.Decimal(10, 2)
-  status      StaffStatus @default(AVAILABLE)
-  
+  id       String @id @default(uuid())
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+
+  name   String
+  role   String      // e.g., "Lead Server", "AV Technician", "Driver"
+  wage   Decimal     @db.Decimal(10, 2)
+  status StaffStatus @default(AVAILABLE)
+  phone  String?
+
   assignments StaffAssignment[]
 
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
 }
 
 model StaffAssignment {
-  id        String   @id @default(uuid())
-  staffId   String
-  staff     Staff    @relation(fields: [staffId], references: [id])
-  
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id])
-  
+  id      String @id @default(uuid())
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id])
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+
   startTime DateTime
   endTime   DateTime
+  role      String?  // Their role for this specific event (may differ from default)
 
   @@index([staffId, startTime, endTime])
+  @@index([eventId])
 }
 
-// ==========================================
-// 6. ANALYTICS & RISK FOUNDATION (AI READY)
-// ==========================================
+// ============================================================
+// LIVE EVENT ENGINE (Phase 5)
+// ============================================================
+
+// Activated when event day begins — drives real-time tracking
+model LiveEvent {
+  id      String @id @default(uuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  isActive    Boolean   @default(true)
+  startedAt   DateTime  @default(now())
+  concludedAt DateTime?
+
+  tasks LiveTask[]
+
+  @@index([isActive])
+}
+
+// SRS task statuses: NOT_STARTED → IN_PROGRESS → COMPLETED | DELAYED
+model LiveTask {
+  id          String    @id @default(uuid())
+  liveEventId String
+  liveEvent   LiveEvent @relation(fields: [liveEventId], references: [id])
+
+  title        String
+  description  String?
+  assignedTo   String?    // Free-text for now — can link to Staff later
+  scheduledAt  DateTime
+  status       TaskStatus @default(NOT_STARTED)
+  completedAt  DateTime?
+  delayReason  String?    // Filled in when status = DELAYED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([liveEventId, status])
+  @@index([scheduledAt])
+}
+
+// ============================================================
+// RISK ENGINE & ANALYTICS (Phase 6)
+// ============================================================
 
 model RiskSnapshot {
-  id          String   @id @default(uuid())
-  targetId    String   // Can be EventId or VendorId
-  targetType  String   // "EVENT" or "VENDOR"
-  
-  riskScore   Int      // 0-100
-  factors     Json     // Structured AI explanations: { "overbooking": true, "budget_overrun": false }
-  
-  createdAt   DateTime @default(now())
+  id         String @id @default(uuid())
+  eventId    String
+  event      Event  @relation(fields: [eventId], references: [id])
+
+  riskScore  Int    // 0 (low) to 100 (critical)
+  // Structured factors: { slotOverload: true, inventoryStrain: false, ... }
+  factors    Json
+  // AI-generated explanation from Gemini
+  aiExplanation String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+  @@index([riskScore])
 }
 
 model FinancialSummary {
-  id            String   @id @default(uuid())
-  referenceId   String   @unique // EventId
-  
-  totalRevenue  Decimal  @db.Decimal(12, 2)
-  totalCosts    Decimal  @db.Decimal(12, 2)
+  id      String @id @default(uuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  totalRevenue    Decimal @db.Decimal(12, 2)
+  totalCosts      Decimal @db.Decimal(12, 2)
   projectedProfit Decimal @db.Decimal(12, 2)
-  
-  updatedAt     DateTime @updatedAt
+  depositCollected Decimal @default(0) @db.Decimal(12, 2)
+
+  updatedAt DateTime @updatedAt
 }

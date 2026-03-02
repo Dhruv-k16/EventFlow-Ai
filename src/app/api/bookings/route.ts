@@ -1,50 +1,143 @@
-import { prisma } from '@/lib/prisma'; // Ensure this matches your prisma.ts location
-import { NextResponse } from 'next/server';
+// src/app/api/bookings/route.ts
+// POST /api/bookings  → create a new REQUESTED booking
+// GET  /api/bookings  → list bookings (filtered by eventId or role)
+//
+// SRS: Booking starts as REQUESTED. Inventory is NOT allocated here.
+// Slot engine validates vendor capacity BEFORE creating the record.
 
-export async function POST(request: Request) {
+import { withAuth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { checkInventoryAvailability, checkVendorCapacity } from '@/lib/slotEngine';
+import { NextRequest, NextResponse } from 'next/server';
+
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   try {
-    const { eventId, vendorId, items, eventDate } = await request.json();
+    const body = await req.json();
+    const { eventId, vendorId, items, notes } = body as {
+      eventId:  string;
+      vendorId: string;
+      notes?:   string;
+      items: { inventoryItemId: string; quantity: number }[];
+    };
 
-    const newBooking = await prisma.$transaction(async (tx: any) => {
-      // 1. Create the Booking
-      const booking = await tx.booking.create({
-        data: {
-          eventId,
-          vendorId,
-          status: 'PENDING',
-          items: {
-            create: items.map((item: any) => ({
-              inventoryItemId: item.id,
-              quantity: item.qty
-            }))
-          }
-        }
-      });
+    if (!eventId || !vendorId || !items?.length) {
+      return NextResponse.json(
+        { error: 'eventId, vendorId, and items[] are required' },
+        { status: 400 }
+      );
+    }
 
-      // 2. Increment holdQty
-      for (const item of items) {
-        await tx.inventoryAvailability.upsert({
-          where: {
-            inventoryItemId_date: {
-              inventoryItemId: item.id,
-              date: new Date(eventDate),
-            },
-          },
-          update: { holdQty: { increment: item.qty } },
-          create: {
-            inventoryItemId: item.id,
-            date: new Date(eventDate),
-            holdQty: item.qty,
-            bookedQty: 0
-          }
-        });
-      }
-      return booking;
+    // ── Fetch event for date range ─────────────────────────────────────────
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+    }
+
+    // ── Slot engine: vendor capacity check ────────────────────────────────
+    // Note: we check capacity here as an advisory warning.
+    // Hard enforcement happens at CONFIRMED transition.
+    const capacityCheck = await checkVendorCapacity(
+      vendorId,
+      event.startDate,
+      event.endDate
+    );
+
+    if (!capacityCheck.canAccept) {
+      return NextResponse.json(
+        { error: `Vendor is not available: ${capacityCheck.reason}` },
+        { status: 409 }
+      );
+    }
+
+    // ── Inventory existence check ─────────────────────────────────────────
+    const inventoryItems = await prisma.inventoryItem.findMany({
+      where: { id: { in: items.map(i => i.inventoryItemId) } },
     });
 
-    return NextResponse.json(newBooking);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: 'Inquiry failed' }, { status: 500 });
+    if (inventoryItems.length !== items.length) {
+      return NextResponse.json(
+        { error: 'One or more inventory items not found' },
+        { status: 404 }
+      );
+    }
+
+    // ── Inventory availability check (advisory — not locked yet) ──────────
+    const inventoryCheck = await checkInventoryAvailability(
+      items,
+      event.startDate,
+      event.endDate
+    );
+
+    if (!inventoryCheck.available) {
+      return NextResponse.json(
+        {
+          error: 'Some items do not have sufficient stock',
+          conflicts: inventoryCheck.conflicts,
+        },
+        { status: 409 }
+      );
+    }
+
+    // ── Calculate total cost ───────────────────────────────────────────────
+    const totalCost = items.reduce((sum, item) => {
+      const inv = inventoryItems.find((i: { id: string }) => i.id === item.inventoryItemId)!;
+      return sum + Number(inv.basePrice) * item.quantity;
+    }, 0);
+
+    // ── Create REQUESTED booking ───────────────────────────────────────────
+    // SRS: Meeting-driven flow. No inventory allocation at this step.
+    const booking = await prisma.booking.create({
+      data: {
+        eventId,
+        vendorId,
+        status:    'REQUESTED',
+        notes,
+        totalCost,
+        items: {
+          create: items.map(item => {
+            const inv = inventoryItems.find((i: { id: string }) => i.id === item.inventoryItemId)!;
+            return {
+              inventoryItemId: item.inventoryItemId,
+              quantity:        item.quantity,
+              priceAtBooking:  inv.basePrice,
+            };
+          }),
+        },
+      },
+      include: {
+        items:    { include: { inventoryItem: true } },
+        vendor:   true,
+        event:    true,
+        meetings: true,
+      },
+    });
+
+    return NextResponse.json(booking, { status: 201 });
+  } catch (err) {
+    console.error('[POST /api/bookings]', err);
+    return NextResponse.json({ error: 'Booking creation failed' }, { status: 500 });
   }
-}
+}, ['PLANNER', 'CLIENT']);
+
+export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
+  try {
+    const { searchParams } = new URL(req.url);
+    const eventId = searchParams.get('eventId');
+
+    const bookings = await prisma.booking.findMany({
+      where: { ...(eventId ? { eventId } : {}) },
+      include: {
+        items:    { include: { inventoryItem: true } },
+        vendor:   true,
+        meetings: { orderBy: { phase: 'asc' } },
+        event:    { select: { name: true, startDate: true, endDate: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return NextResponse.json(bookings);
+  } catch (err) {
+    console.error('[GET /api/bookings]', err);
+    return NextResponse.json({ error: 'Failed to fetch bookings' }, { status: 500 });
+  }
+}, ['PLANNER', 'CLIENT', 'ADMIN']);
