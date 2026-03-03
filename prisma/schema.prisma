@@ -372,7 +372,8 @@ model LiveEvent {
   startedAt   DateTime  @default(now())
   concludedAt DateTime?
 
-  tasks LiveTask[]
+  tasks     LiveTask[]
+  incidents Incident[]
 
   @@index([isActive])
 }
@@ -430,4 +431,21 @@ model FinancialSummary {
   depositCollected Decimal @default(0) @db.Decimal(12, 2)
 
   updatedAt DateTime @updatedAt
+}
+
+model Incident {
+  id          String    @id @default(uuid())
+  liveEventId String
+  liveEvent   LiveEvent @relation(fields: [liveEventId], references: [id])
+
+  title       String
+  description String?
+  severity    String    @default("LOW")
+  reportedBy  String?
+  resolvedAt  DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([liveEventId, severity])
 }
