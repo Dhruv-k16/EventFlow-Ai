@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Vendor" ADD COLUMN     "delayedDeliveries" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "lastMinuteRequests" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "totalDeliveries" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "totalOrders" INTEGER NOT NULL DEFAULT 0;

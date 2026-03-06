@@ -18,9 +18,9 @@ type BlockRow  = { id: string; startDate: Date; endDate: Date; reason: string | 
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
   const { searchParams } = new URL(req.url);
   const dateParam = searchParams.get('date');
   const targetDate = dateParam ? toUTCMidnight(dateParam) : toUTCMidnight(new Date());
