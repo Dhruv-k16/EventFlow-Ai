@@ -66,7 +66,7 @@ function formatItem(item: ItemRow, targetDate: Date) {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = params;
+  const { id } = await params;
   const targetDate = toUTCMidnight(new URL(req.url).searchParams.get('date') ?? new Date());
   try {
     const vendor = await prisma.vendor.findUnique({ where: { id }, select: { id: true, businessName: true } });
