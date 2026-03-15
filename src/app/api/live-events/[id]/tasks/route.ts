@@ -1,23 +1,14 @@
 // src/app/api/live-events/[id]/tasks/route.ts
-// GET  /api/live-events/:id/tasks  — list all tasks
-// POST /api/live-events/:id/tasks  — add a task to live event
-
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const GET = withAuth(async (_req: NextRequest, ctx) => {
   const { id } = await (ctx.params as unknown as Promise<{ id: string }>);
-
   try {
     const le = await prisma.liveEvent.findUnique({ where: { id }, select: { id: true } });
     if (!le) return NextResponse.json({ error: 'Live event not found' }, { status: 404 });
-
-    const tasks = await prisma.liveTask.findMany({
-      where:   { liveEventId: id },
-      orderBy: { scheduledAt: 'asc' },
-    });
-
+    const tasks = await prisma.liveTask.findMany({ where: { liveEventId: id }, orderBy: { scheduledAt: 'asc' } });
     return NextResponse.json(tasks.map(t => ({
       ...t,
       scheduledAt: t.scheduledAt.toISOString(),
@@ -33,7 +24,6 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
 
 export const POST = withAuth(async (req: NextRequest, ctx) => {
   const { id } = await (ctx.params as unknown as Promise<{ id: string }>);
-
   try {
     const le = await prisma.liveEvent.findUnique({ where: { id }, select: { id: true, isActive: true } });
     if (!le) return NextResponse.json({ error: 'Live event not found' }, { status: 404 });
@@ -41,17 +31,15 @@ export const POST = withAuth(async (req: NextRequest, ctx) => {
 
     const body = await req.json();
     const { title, description, assignedTo, scheduledAt } = body as {
-      title:       string;
-      description?: string;
-      assignedTo?:  string;
-      scheduledAt:  string;
+      title: string; description?: string; assignedTo?: string; scheduledAt: string;
     };
-
-    if (!title?.trim() || !scheduledAt)
-      return NextResponse.json({ error: 'title and scheduledAt are required' }, { status: 400 });
+    if (!title?.trim() || !scheduledAt) return NextResponse.json({ error: 'title and scheduledAt are required' }, { status: 400 });
 
     const task = await prisma.liveTask.create({
+      // FIX: LiveTask has no @default(uuid()) — must supply id + updatedAt
       data: {
+        id:          crypto.randomUUID(),
+        updatedAt:   new Date(),
         liveEventId: id,
         title:       title.trim(),
         description: description?.trim() ?? null,

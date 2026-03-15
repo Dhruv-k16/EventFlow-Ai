@@ -1,3 +1,4 @@
+// src/app/api/vendor/[id]/availability/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withAuth } from '@/lib/auth';
@@ -37,8 +38,10 @@ export const POST = withAuth<{ id: string }>(
       if (startDate > endDate) return NextResponse.json({ error: 'startDate must be before endDate' }, { status: 400 });
 
       const conflicts = await prisma.booking.findMany({
-        where: { vendorId: id, status: 'CONFIRMED',
-          event: { startDate: { lte: endDate }, endDate: { gte: startDate } } },
+        where: {
+          vendorId: id, status: 'CONFIRMED',
+          event: { startDate: { lte: endDate }, endDate: { gte: startDate } },
+        },
         include: { event: { select: { name: true, startDate: true, endDate: true } } },
       });
       if (conflicts.length > 0) {
@@ -50,7 +53,8 @@ export const POST = withAuth<{ id: string }>(
       }
 
       const block = await prisma.vendorAvailabilityBlock.create({
-        data: { vendorId: id, startDate, endDate, reason: reason ?? null },
+        // FIX: VendorAvailabilityBlock has no @default(uuid()) — must supply id
+        data: { id: crypto.randomUUID(), vendorId: id, startDate, endDate, reason: reason ?? null },
       });
       return NextResponse.json({
         id: block.id, vendorId: block.vendorId,

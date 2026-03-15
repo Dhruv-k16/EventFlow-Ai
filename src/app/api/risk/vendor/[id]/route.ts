@@ -9,7 +9,8 @@ import {
 } from '@/lib/riskEngine';
 import { interpretVendorRisk } from '@/lib/aiInterpreter';
 
-type InventoryRow = { totalQuantity: number; _count: { dailyAllocations: number } };
+// FIX: was dailyAllocations — relation name is InventoryAllocation in schema
+type InventoryRow = { totalQuantity: number; _count: { InventoryAllocation: number } };
 type StaffRow     = { status: string };
 type BookingRow   = { status: string; totalCost: unknown; depositPaid: unknown };
 type VendorFull   = {
@@ -34,9 +35,15 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
     const vendor = await prisma.vendor.findUnique({
       where: { id },
       include: {
-        inventory: { select: { totalQuantity: true, _count: { select: { dailyAllocations: true } } } },
-        staff:     { select: { status: true } },
-        bookings:  { select: { status: true, totalCost: true, depositPaid: true } },
+        inventory: {
+          select: {
+            totalQuantity: true,
+            // FIX: was dailyAllocations — now InventoryAllocation
+            _count: { select: { InventoryAllocation: true } },
+          },
+        },
+        staff:    { select: { status: true } },
+        bookings: { select: { status: true, totalCost: true, depositPaid: true } },
       },
     }) as unknown as VendorFull | null;
 
@@ -47,19 +54,20 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
       include: { staff: { select: { wage: true } } },
     });
 
-    const totalInventoryQty  = vendor.inventory.reduce((s: number, i: InventoryRow) => s + i.totalQuantity, 0);
-    const bookedInventoryQty = vendor.inventory.reduce((s: number, i: InventoryRow) => s + i._count.dailyAllocations, 0);
+    const totalInventoryQty  = vendor.inventory.reduce((s, i) => s + i.totalQuantity, 0);
+    // FIX: was i._count.dailyAllocations — now i._count.InventoryAllocation
+    const bookedInventoryQty = vendor.inventory.reduce((s, i) => s + i._count.InventoryAllocation, 0);
     const inventoryStrainPct = totalInventoryQty > 0
       ? Math.round((bookedInventoryQty / totalInventoryQty) * 100) : 0;
 
     const totalStaff  = vendor.staff.length;
-    const onSiteStaff = vendor.staff.filter((s: StaffRow) => s.status === 'ON_SITE').length;
-    const onLeave     = vendor.staff.filter((s: StaffRow) => s.status === 'ON_LEAVE').length;
-    const available   = vendor.staff.filter((s: StaffRow) => s.status === 'AVAILABLE').length;
+    const onSiteStaff = vendor.staff.filter(s => s.status === 'ON_SITE').length;
+    const onLeave     = vendor.staff.filter(s => s.status === 'ON_LEAVE').length;
+    const available   = vendor.staff.filter(s => s.status === 'AVAILABLE').length;
 
-    const confirmed      = vendor.bookings.filter((b: BookingRow) => ['CONFIRMED','COMPLETED'].includes(b.status));
-    const totalRevenue   = confirmed.reduce((s: number, b: BookingRow) => s + Number(b.totalCost),   0);
-    const totalCollected = confirmed.reduce((s: number, b: BookingRow) => s + Number(b.depositPaid), 0);
+    const confirmed      = vendor.bookings.filter(b => ['CONFIRMED','COMPLETED'].includes(b.status));
+    const totalRevenue   = confirmed.reduce((s, b) => s + Number(b.totalCost),   0);
+    const totalCollected = confirmed.reduce((s, b) => s + Number(b.depositPaid), 0);
     const outstanding    = totalRevenue - totalCollected;
 
     const wageCost = staffAssignments.reduce((sum, a) => {
@@ -67,8 +75,9 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
       return sum + Number(a.staff.wage) * hours;
     }, 0);
 
+    // FIX: was { event: { bookings: ... } } — relation name is Event (PascalCase) in schema
     const liveEventIds = (await prisma.liveEvent.findMany({
-      where:  { event: { bookings: { some: { vendorId: id } } } },
+      where:  { Event: { bookings: { some: { vendorId: id } } } },
       select: { id: true },
     })).map(le => le.id);
 
@@ -120,9 +129,9 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
     });
 
     const snapshots = await prisma.riskSnapshot.findMany({
-      where: { targetId: id, targetType: 'VENDOR' } as Record<string, unknown>,
+      where:   { targetId: id, targetType: 'VENDOR' } as Record<string, unknown>,
       orderBy: { createdAt: 'asc' }, take: 30,
-      select: { createdAt: true, riskScore: true },
+      select:  { createdAt: true, riskScore: true },
     });
 
     return NextResponse.json({

@@ -1,13 +1,15 @@
+// src/app/api/vendor/[id]/inventory/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withAuth } from '@/lib/auth';
 import { toUTCMidnight } from '@/lib/slotEngine';
 
+// FIX: updated type to use InventoryAllocation instead of dailyAllocations
 type InvItemWithAlloc = {
   id: string; vendorId: string; name: string; description: string | null;
   totalQuantity: number; basePrice: number | { toString(): string };
   unit: string; imageUrl: string | null;
-  dailyAllocations: { allocatedQty: number }[];
+  InventoryAllocation: { allocatedQty: number }[]; // FIX: was dailyAllocations
   createdAt: Date; updatedAt: Date;
 };
 
@@ -15,8 +17,9 @@ const fmt = (item: InvItemWithAlloc) => ({
   id: item.id, vendorId: item.vendorId, name: item.name,
   description: item.description, totalQuantity: item.totalQuantity,
   basePrice: Number(item.basePrice), unit: item.unit, imageUrl: item.imageUrl,
-  availableQty: item.totalQuantity - (item.dailyAllocations[0]?.allocatedQty ?? 0),
-  allocatedQty: item.dailyAllocations[0]?.allocatedQty ?? 0,
+  // FIX: was item.dailyAllocations — now item.InventoryAllocation
+  availableQty: item.totalQuantity - (item.InventoryAllocation[0]?.allocatedQty ?? 0),
+  allocatedQty: item.InventoryAllocation[0]?.allocatedQty ?? 0,
   createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(),
 });
 
@@ -28,14 +31,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
 
     const items = await prisma.inventoryItem.findMany({
-      where: { vendorId: id },
-      include: { dailyAllocations: { where: { date: targetDate } } },
+      where:   { vendorId: id },
+      // FIX: was dailyAllocations — relation name is InventoryAllocation in schema
+      include: { InventoryAllocation: { where: { date: targetDate } } },
       orderBy: { name: 'asc' },
     });
+
     return NextResponse.json({
       vendorId: vendor.id, businessName: vendor.businessName,
-      date: targetDate.toISOString().split('T')[0],
-      items: (items as InvItemWithAlloc[]).map(fmt),
+      date:  targetDate.toISOString().split('T')[0],
+      items: (items as unknown as InvItemWithAlloc[]).map(fmt),
     });
   } catch (err) {
     console.error('[GET /api/vendor/[id]/inventory]', err);
@@ -67,6 +72,7 @@ export const POST = withAuth<{ id: string }>(
           imageUrl: imageUrl ?? null,
         },
       });
+
       return NextResponse.json({
         id: item.id, vendorId: item.vendorId, name: item.name,
         description: item.description, totalQuantity: item.totalQuantity,

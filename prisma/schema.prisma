@@ -237,7 +237,7 @@ model FinancialSummary {
 }
 
 model Incident {
-  id          String    @id
+  id          String    @id @default(uuid())
   liveEventId String
   title       String
   description String?
@@ -245,14 +245,14 @@ model Incident {
   reportedBy  String?
   resolvedAt  DateTime?
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   LiveEvent   LiveEvent @relation(fields: [liveEventId], references: [id])
 
   @@index([liveEventId, severity])
 }
 
 model InventoryAllocation {
-  id              String        @id
+  id              String        @id @default(uuid())
   inventoryItemId String
   date            DateTime
   allocatedQty    Int           @default(0)
@@ -263,7 +263,7 @@ model InventoryAllocation {
 }
 
 model InventoryVariant {
-  id                  String                @id
+  id                  String                @id @default(uuid())
   itemId              String
   name                String
   sku                 String?
@@ -276,7 +276,7 @@ model InventoryVariant {
   attributes          Json?
   imageUrl            String?
   createdAt           DateTime              @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime  @updatedAt
   BookingItem         BookingItem[]
   InventoryItem       InventoryItem         @relation(fields: [itemId], references: [id])
   VariantAvailability VariantAvailability[]
@@ -286,7 +286,7 @@ model InventoryVariant {
 }
 
 model LiveEvent {
-  id                 String     @id
+  id                 String     @id @default(uuid())
   eventId            String     @unique
   isActive           Boolean    @default(true)
   startedAt          DateTime   @default(now())
@@ -300,7 +300,7 @@ model LiveEvent {
 }
 
 model LiveTask {
-  id          String     @id
+  id          String     @id @default(uuid())
   liveEventId String
   title       String
   description String?
@@ -310,7 +310,7 @@ model LiveTask {
   completedAt DateTime?
   delayReason String?
   createdAt   DateTime   @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   LiveEvent   LiveEvent  @relation(fields: [liveEventId], references: [id])
 
   @@index([liveEventId, status])
@@ -318,7 +318,7 @@ model LiveTask {
 }
 
 model MeetingRecord {
-  id          String        @id
+  id          String        @id @default(uuid())
   bookingId   String
   phase       Int
   status      MeetingStatus @default(SCHEDULED)
@@ -327,27 +327,28 @@ model MeetingRecord {
   meetingLink String?
   notes       String?
   createdAt   DateTime      @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime  @updatedAt
   Booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([bookingId])
 }
 
 model PlannerProfile {
-  id              String   @id
+  id              String   @id @default(uuid())
   userId          String   @unique
   businessName    String?
   maxEventsPerDay Int      @default(3)
   bio             String?
   yearsExperience Int?
   createdAt       DateTime @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime  @updatedAt
   eventsPlanned   Event[]  @relation("PlannerEvents")
+  staff           PlannerStaff[]
   User            User     @relation(fields: [userId], references: [id])
 }
 
 model RefreshToken {
-  id        String   @id
+  id        String   @id @default(uuid())
   token     String   @unique
   userId    String
   expiresAt DateTime
@@ -360,7 +361,7 @@ model RefreshToken {
 }
 
 model VariantAvailability {
-  id               String           @id
+  id               String           @id @default(uuid())
   variantId        String
   date             DateTime
   bookedQty        Int              @default(0)
@@ -372,7 +373,7 @@ model VariantAvailability {
 }
 
 model VendorAvailabilityBlock {
-  id        String   @id
+  id        String   @id @default(uuid())
   vendorId  String
   startDate DateTime
   endDate   DateTime
@@ -427,4 +428,30 @@ enum TaskStatus {
 enum EventType {
   SINGLE
   MULTI_FUNCTION
+}
+
+// ── PLANNER STAFF ─────────────────────────────────────────────────────────────
+
+enum PlannerStaffStatus {
+  AVAILABLE
+  BUSY
+  ON_LEAVE
+}
+
+model PlannerStaff {
+  id               String              @id @default(uuid())
+  plannerProfileId String
+  planner          PlannerProfile      @relation(fields: [plannerProfileId], references: [id], onDelete: Cascade)
+
+  name             String
+  role             String
+  email            String?
+  phone            String?
+  status           PlannerStaffStatus  @default(AVAILABLE)
+  assignedEvents   Int                 @default(0)
+
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([plannerProfileId, status])
 }

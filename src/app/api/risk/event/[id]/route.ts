@@ -1,17 +1,10 @@
 // src/app/api/risk/event/[id]/route.ts
-// GET /api/risk/event/:id?role=PLANNER|CLIENT
-
 import { interpretClientRisk, interpretPlannerRisk } from '@/lib/aiInterpreter';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import {
-    calcClientBudget,
-    calcClientRisk,
-    calcPlannerFinancials,
-    calcPlannerRisk,
-    calcWeatherRiskScore,
-    formatRiskTrend,
-    scoreToLevel,
+  calcClientBudget, calcClientRisk, calcPlannerFinancials,
+  calcPlannerRisk, calcWeatherRiskScore, formatRiskTrend, scoreToLevel,
 } from '@/lib/riskEngine';
 import { getWeatherForecast } from '@/lib/weatherService';
 import { Prisma } from '@prisma/client';
@@ -23,30 +16,27 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
 
   try {
     const event = await prisma.event.findUnique({
-      where: { id },
-      include: { bookings: true },
+      where: { id }, include: { bookings: true },
     });
     if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
     const liveEvent = await prisma.liveEvent.findUnique({
-      where: { eventId: id },
-      include: { tasks: true },
+      where:   { eventId: id },
+      // FIX: was tasks — relation name is LiveTask in schema
+      include: { LiveTask: true },
     });
     const incidents = liveEvent
       ? await prisma.incident.findMany({ where: { liveEventId: liveEvent.id } })
       : [];
 
     const staffAssignments = await prisma.staffAssignment.findMany({
-      where: { eventId: id },
-      include: { staff: { select: { status: true } } },
+      where: { eventId: id }, include: { staff: { select: { status: true } } },
     });
 
-    // Weather
-    const weather = await getWeatherForecast(event.location, event.startDate);
+    const weather          = await getWeatherForecast(event.location, event.startDate);
     const weatherRiskScore = calcWeatherRiskScore(weather);
     const enrichedWeather  = { ...weather, riskScore: weatherRiskScore };
 
-    // Aggregates
     const confirmedBookings   = event.bookings.filter(b => ['CONFIRMED','COMPLETED'].includes(b.status));
     const unconfirmedBookings = event.bookings.filter(b => !['CONFIRMED','COMPLETED','CANCELLED','REJECTED_CAPACITY'].includes(b.status));
     const cancelledBookings   = event.bookings.filter(b => b.status === 'CANCELLED');
@@ -54,10 +44,12 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
     const depositPaid         = event.bookings.reduce((s, b) => s + Number(b.depositPaid), 0);
     const openIncidents       = incidents.filter(i => !i.resolvedAt);
     const criticalIncidents   = openIncidents.filter(i => i.severity === 'CRITICAL');
-    const tasks               = liveEvent?.tasks ?? [];
-    const delayedTasks        = tasks.filter((t: {status:string}) => t.status === 'DELAYED');
-    const staffOnLeave        = staffAssignments.filter(a => a.staff.status === 'ON_LEAVE').length;
-    const changeRequests      = liveEvent?.changeRequestCount ?? 0;
+
+    // FIX: was liveEvent?.tasks — now liveEvent?.LiveTask
+    const tasks        = liveEvent?.LiveTask ?? [];
+    const delayedTasks = tasks.filter((t: { status: string }) => t.status === 'DELAYED');
+    const staffOnLeave = staffAssignments.filter(a => a.staff.status === 'ON_LEAVE').length;
+    const changeRequests = liveEvent?.changeRequestCount ?? 0;
 
     let riskScore: number;
     let riskFactors: Record<string, number>;
@@ -117,14 +109,13 @@ export const GET = withAuth(async (req: NextRequest, ctx) => {
       });
     }
 
-    // Persist snapshot
     await prisma.riskSnapshot.create({
       data: {
         targetId: id, targetType: 'EVENT', role, riskScore,
-        factors: riskFactors,
-        aiSummary: aiResult.aiSummary,
+        factors:         riskFactors,
+        aiSummary:       aiResult.aiSummary,
         recommendations: aiResult.recommendations,
-        alerts: aiResult.alerts,
+        alerts:          aiResult.alerts,
         weatherData:     weather.geocoded ? (enrichedWeather as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
     });

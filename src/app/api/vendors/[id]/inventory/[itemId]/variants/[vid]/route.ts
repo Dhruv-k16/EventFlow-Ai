@@ -1,7 +1,4 @@
 // src/app/api/vendors/[id]/inventory/[itemId]/variants/[vid]/route.ts
-// PATCH  — update a single variant
-// DELETE — delete a single variant
-
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma }   from '@/lib/prisma';
 import { withAuth } from '@/lib/auth';
@@ -9,9 +6,7 @@ import { withAuth } from '@/lib/auth';
 type Params = { id: string; itemId: string; vid: string };
 
 async function syncParentQty(itemId: string) {
-  const agg = await prisma.inventoryVariant.aggregate({
-    where: { itemId }, _sum: { totalQuantity: true },
-  });
+  const agg   = await prisma.inventoryVariant.aggregate({ where: { itemId }, _sum: { totalQuantity: true } });
   const count = await prisma.inventoryVariant.count({ where: { itemId } });
   await prisma.inventoryItem.update({
     where: { id: itemId },
@@ -19,16 +14,18 @@ async function syncParentQty(itemId: string) {
   });
 }
 
-// ── PATCH ─────────────────────────────────────────────────────────────────────
 export const PATCH = withAuth<Params>(
   async (req, { params }, user) => {
-    const { id, itemId, vid } = params;
+    const { id, itemId, vid } = await (params as unknown as Promise<{ id: string; itemId: string; vid: string }>);
 
     const variant = await prisma.inventoryVariant.findUnique({
-      where: { id: vid }, include: { item: { select: { vendorId: true } } },
+      where: { id: vid },
+      // FIX: was item — relation name is InventoryItem (PascalCase) in schema
+      include: { InventoryItem: { select: { vendorId: true } } },
     });
     if (!variant) return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
-    if (user.role === 'VENDOR' && variant.item.vendorId !== id)
+    // FIX: was variant.item — now variant.InventoryItem
+    if (user.role === 'VENDOR' && variant.InventoryItem.vendorId !== id)
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
 
     try {
@@ -52,7 +49,6 @@ export const PATCH = withAuth<Params>(
 
       const updated = await prisma.inventoryVariant.update({ where: { id: vid }, data });
       await syncParentQty(itemId);
-
       return NextResponse.json(updated);
     } catch (err) {
       console.error('[PATCH variant]', err);
@@ -62,32 +58,29 @@ export const PATCH = withAuth<Params>(
   ['VENDOR', 'ADMIN']
 );
 
-// ── DELETE ────────────────────────────────────────────────────────────────────
 export const DELETE = withAuth<Params>(
   async (_req, { params }, user) => {
-    const { id, itemId, vid } = params;
+    const { id, itemId, vid } = await (params as unknown as Promise<{ id: string; itemId: string; vid: string }>);
 
     const variant = await prisma.inventoryVariant.findUnique({
-      where: { id: vid }, include: { item: { select: { vendorId: true } } },
+      where: { id: vid },
+      // FIX: was item — now InventoryItem
+      include: { InventoryItem: { select: { vendorId: true } } },
     });
     if (!variant) return NextResponse.json({ error: 'Variant not found' }, { status: 404 });
-    if (user.role === 'VENDOR' && variant.item.vendorId !== id)
+    // FIX: was variant.item — now variant.InventoryItem
+    if (user.role === 'VENDOR' && variant.InventoryItem.vendorId !== id)
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
 
-    // Block delete if variant has active bookings
     const activeBookings = await prisma.bookingItem.count({
       where: { variantId: vid, booking: { status: { in: ['CONFIRMED', 'REQUESTED', 'CONFIRMATION_PENDING', 'MEETING_PHASE_1', 'MEETING_PHASE_2'] as import('@prisma/client').BookingStatus[] } } },
     });
     if (activeBookings > 0)
-      return NextResponse.json(
-        { error: `Cannot delete — ${activeBookings} active booking(s) reference this variant` },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: `Cannot delete — ${activeBookings} active booking(s) reference this variant` }, { status: 409 });
 
     await prisma.variantAvailability.deleteMany({ where: { variantId: vid } });
     await prisma.inventoryVariant.delete({ where: { id: vid } });
     await syncParentQty(itemId);
-
     return NextResponse.json({ deleted: vid, itemId });
   },
   ['VENDOR', 'ADMIN']

@@ -6,24 +6,27 @@ import { withAuth } from '@/lib/auth';
 import { toUTCMidnight } from '@/lib/slotEngine';
 
 type VariantAvailRow = { bookedQty: number; holdQty: number };
+// FIX: was dailyAvailability — relation name is VariantAvailability in schema
 type VariantRow = {
   id: string; itemId: string; name: string; sku: string | null;
   totalQuantity: number; bookedQuantity: number; priceOverride: unknown;
   color: string | null; material: string | null; dimensions: string | null;
   attributes: unknown; imageUrl: string | null; createdAt: Date; updatedAt: Date;
-  dailyAvailability: VariantAvailRow[];
+  VariantAvailability: VariantAvailRow[]; // FIX: was dailyAvailability
 };
+// FIX: was variants/dailyAllocations — relation names are InventoryVariant/InventoryAllocation
 type ItemRow = {
   id: string; vendorId: string; name: string; description: string | null;
   basePrice: unknown; unit: string; imageUrl: string | null;
   hasVariants: boolean; totalQuantity: number;
-  variants: VariantRow[];
-  dailyAllocations: { allocatedQty: number }[];
+  InventoryVariant:   VariantRow[];            // FIX: was variants
+  InventoryAllocation: { allocatedQty: number }[]; // FIX: was dailyAllocations
   createdAt: Date; updatedAt: Date;
 };
 
 function formatVariant(v: VariantRow, parentBasePrice: number) {
-  const avail = v.dailyAvailability[0];
+  // FIX: was v.dailyAvailability — now v.VariantAvailability
+  const avail = v.VariantAvailability[0];
   const price = v.priceOverride != null ? Number(v.priceOverride) : parentBasePrice;
   return {
     id: v.id, itemId: v.itemId, name: v.name, sku: v.sku,
@@ -39,21 +42,23 @@ function formatVariant(v: VariantRow, parentBasePrice: number) {
 
 function formatItem(item: ItemRow, targetDate: Date) {
   const basePrice = Number(item.basePrice);
-  if (item.hasVariants && item.variants.length > 0) {
-    const totalQty     = item.variants.reduce((s, v) => s + v.totalQuantity, 0);
-    const allocatedQty = item.variants.reduce((s, v) => s + (v.dailyAvailability[0]?.bookedQty ?? 0), 0);
-    const holdQty      = item.variants.reduce((s, v) => s + (v.dailyAvailability[0]?.holdQty   ?? 0), 0);
+  // FIX: was item.variants — now item.InventoryVariant
+  if (item.hasVariants && item.InventoryVariant.length > 0) {
+    const totalQty     = item.InventoryVariant.reduce((s, v) => s + v.totalQuantity, 0);
+    const allocatedQty = item.InventoryVariant.reduce((s, v) => s + (v.VariantAvailability[0]?.bookedQty ?? 0), 0);
+    const holdQty      = item.InventoryVariant.reduce((s, v) => s + (v.VariantAvailability[0]?.holdQty   ?? 0), 0);
     return {
       id: item.id, vendorId: item.vendorId, name: item.name,
       description: item.description, basePrice, unit: item.unit,
       imageUrl: item.imageUrl, hasVariants: true, totalQuantity: totalQty,
       availableQty: totalQty - allocatedQty - holdQty, allocatedQty, holdQty,
-      variants: item.variants.map(v => formatVariant(v, basePrice)),
+      variants: item.InventoryVariant.map(v => formatVariant(v, basePrice)), // FIX: was item.variants
       date: targetDate.toISOString().split('T')[0],
       createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(),
     };
   }
-  const alloc = item.dailyAllocations[0];
+  // FIX: was item.dailyAllocations — now item.InventoryAllocation
+  const alloc = item.InventoryAllocation[0];
   return {
     id: item.id, vendorId: item.vendorId, name: item.name,
     description: item.description, basePrice, unit: item.unit,
@@ -66,19 +71,26 @@ function formatItem(item: ItemRow, targetDate: Date) {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = params;
+  // FIX: was const { id } = params — Next.js 15 requires await
+  const { id } = await params;
   const targetDate = toUTCMidnight(new URL(req.url).searchParams.get('date') ?? new Date());
   try {
     const vendor = await prisma.vendor.findUnique({ where: { id }, select: { id: true, businessName: true } });
     if (!vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
+
     const items = await prisma.inventoryItem.findMany({
       where: { vendorId: id },
       include: {
-        variants: { include: { dailyAvailability: { where: { date: targetDate } } }, orderBy: { name: 'asc' } },
-        dailyAllocations: { where: { date: targetDate } },
+        // FIX: were variants/dailyAllocations — now InventoryVariant/InventoryAllocation
+        InventoryVariant:   {
+          include: { VariantAvailability: { where: { date: targetDate } } }, // FIX: was dailyAvailability
+          orderBy: { name: 'asc' },
+        },
+        InventoryAllocation: { where: { date: targetDate } },
       },
       orderBy: { name: 'asc' },
     });
+
     return NextResponse.json({
       vendorId: vendor.id, businessName: vendor.businessName,
       date: targetDate.toISOString().split('T')[0],
@@ -108,6 +120,7 @@ export const POST = withAuth<{ id: string }>(
         return NextResponse.json({ error: 'name and basePrice are required' }, { status: 400 });
       if (basePrice < 0)
         return NextResponse.json({ error: 'basePrice cannot be negative' }, { status: 400 });
+
       const vendor = await prisma.vendor.findUnique({ where: { id }, select: { id: true } });
       if (!vendor) return NextResponse.json({ error: 'Vendor not found' }, { status: 404 });
 
@@ -129,19 +142,31 @@ export const POST = withAuth<{ id: string }>(
 
       if (hasVariants && variants) {
         await prisma.$transaction(variants.map(v =>
-          prisma.inventoryVariant.create({ data: {
-            itemId: item.id, name: v.name.trim(), sku: v.sku?.trim() ?? null,
-            totalQuantity: v.totalQuantity, bookedQuantity: 0,
-            priceOverride: v.priceOverride ?? null,
-            color: v.color ?? null, material: v.material ?? null,
-            dimensions: v.dimensions ?? null,
-            attributes: v.attributes != null ? v.attributes as Prisma.InputJsonValue : Prisma.JsonNull,
-            imageUrl: v.imageUrl ?? null,
-          }})
+          prisma.inventoryVariant.create({
+            data: {
+              // FIX: InventoryVariant has no @default(uuid()) — must supply id + updatedAt
+              id:            crypto.randomUUID(),
+              updatedAt:     new Date(),
+              itemId:        item.id,
+              name:          v.name.trim(),
+              sku:           v.sku?.trim() ?? null,
+              totalQuantity: v.totalQuantity,
+              bookedQuantity: 0,
+              priceOverride: v.priceOverride ?? null,
+              color:         v.color ?? null,
+              material:      v.material ?? null,
+              dimensions:    v.dimensions ?? null,
+              attributes:    v.attributes != null ? v.attributes as Prisma.InputJsonValue : Prisma.JsonNull,
+              imageUrl:      v.imageUrl ?? null,
+            },
+          })
         ));
       }
 
-      const full = await prisma.inventoryItem.findUnique({ where: { id: item.id }, include: { variants: true } });
+      // FIX: was include: { variants: true } — now InventoryVariant
+      const full = await prisma.inventoryItem.findUnique({
+        where: { id: item.id }, include: { InventoryVariant: true },
+      });
       return NextResponse.json(full, { status: 201 });
     } catch (err) {
       console.error('[POST /api/vendors/[id]/inventory]', err);

@@ -1,10 +1,4 @@
 // src/app/api/bookings/route.ts
-// POST /api/bookings  → create a new REQUESTED booking
-// GET  /api/bookings  → list bookings (filtered by eventId or role)
-//
-// SRS: Booking starts as REQUESTED. Inventory is NOT allocated here.
-// Slot engine validates vendor capacity BEFORE creating the record.
-
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { checkInventoryAvailability, checkVendorCapacity } from '@/lib/slotEngine';
@@ -14,101 +8,54 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   try {
     const body = await req.json();
     const { eventId, vendorId, items, notes } = body as {
-      eventId:  string;
-      vendorId: string;
-      notes?:   string;
+      eventId: string; vendorId: string; notes?: string;
       items: { inventoryItemId: string; quantity: number }[];
     };
 
     if (!eventId || !vendorId || !items?.length) {
-      return NextResponse.json(
-        { error: 'eventId, vendorId, and items[] are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'eventId, vendorId, and items[] are required' }, { status: 400 });
     }
 
-    // ── Fetch event for date range ─────────────────────────────────────────
     const event = await prisma.event.findUnique({ where: { id: eventId } });
-    if (!event) {
-      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
-    }
+    if (!event) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
 
-    // ── Slot engine: vendor capacity check ────────────────────────────────
-    // Note: we check capacity here as an advisory warning.
-    // Hard enforcement happens at CONFIRMED transition.
-    const capacityCheck = await checkVendorCapacity(
-      vendorId,
-      event.startDate,
-      event.endDate
-    );
-
+    const capacityCheck = await checkVendorCapacity(vendorId, event.startDate, event.endDate);
     if (!capacityCheck.canAccept) {
-      return NextResponse.json(
-        { error: `Vendor is not available: ${capacityCheck.reason}` },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: `Vendor is not available: ${capacityCheck.reason}` }, { status: 409 });
     }
 
-    // ── Inventory existence check ─────────────────────────────────────────
     const inventoryItems = await prisma.inventoryItem.findMany({
       where: { id: { in: items.map(i => i.inventoryItemId) } },
     });
-
     if (inventoryItems.length !== items.length) {
-      return NextResponse.json(
-        { error: 'One or more inventory items not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'One or more inventory items not found' }, { status: 404 });
     }
 
-    // ── Inventory availability check (advisory — not locked yet) ──────────
-    const inventoryCheck = await checkInventoryAvailability(
-      items,
-      event.startDate,
-      event.endDate
-    );
-
+    const inventoryCheck = await checkInventoryAvailability(items, event.startDate, event.endDate);
     if (!inventoryCheck.available) {
-      return NextResponse.json(
-        {
-          error: 'Some items do not have sufficient stock',
-          conflicts: inventoryCheck.conflicts,
-        },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: 'Some items do not have sufficient stock', conflicts: inventoryCheck.conflicts }, { status: 409 });
     }
 
-    // ── Calculate total cost ───────────────────────────────────────────────
     const totalCost = items.reduce((sum, item) => {
       const inv = inventoryItems.find((i: { id: string }) => i.id === item.inventoryItemId)!;
       return sum + Number(inv.basePrice) * item.quantity;
     }, 0);
 
-    // ── Create REQUESTED booking ───────────────────────────────────────────
-    // SRS: Meeting-driven flow. No inventory allocation at this step.
     const booking = await prisma.booking.create({
       data: {
-        eventId,
-        vendorId,
-        status:    'REQUESTED',
-        notes,
-        totalCost,
+        eventId, vendorId, status: 'REQUESTED', notes, totalCost,
         items: {
           create: items.map(item => {
             const inv = inventoryItems.find((i: { id: string }) => i.id === item.inventoryItemId)!;
-            return {
-              inventoryItemId: item.inventoryItemId,
-              quantity:        item.quantity,
-              priceAtBooking:  inv.basePrice,
-            };
+            return { inventoryItemId: item.inventoryItemId, quantity: item.quantity, priceAtBooking: inv.basePrice };
           }),
         },
       },
       include: {
-        items:    { include: { inventoryItem: true } },
-        vendor:   true,
-        event:    true,
-        meetings: true,
+        items:        { include: { inventoryItem: true } },
+        vendor:       true,
+        event:        true,
+        MeetingRecord: true, // FIX: was meetings
       },
     });
 
@@ -127,10 +74,10 @@ export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
     const bookings = await prisma.booking.findMany({
       where: { ...(eventId ? { eventId } : {}) },
       include: {
-        items:    { include: { inventoryItem: true } },
-        vendor:   true,
-        meetings: { orderBy: { phase: 'asc' } },
-        event:    { select: { name: true, startDate: true, endDate: true } },
+        items:        { include: { inventoryItem: true } },
+        vendor:       true,
+        MeetingRecord: { orderBy: { phase: 'asc' } }, // FIX: was meetings
+        event:        { select: { name: true, startDate: true, endDate: true } },
       },
       orderBy: { createdAt: 'desc' },
     });

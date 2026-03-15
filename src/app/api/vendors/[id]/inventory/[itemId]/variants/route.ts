@@ -1,9 +1,4 @@
 // src/app/api/vendors/[id]/inventory/[itemId]/variants/route.ts
-// GET    /api/vendors/:id/inventory/:itemId/variants       — list variants
-// POST   /api/vendors/:id/inventory/:itemId/variants       — add variant(s)
-// PATCH  /api/vendors/:id/inventory/:itemId/variants/:vid  — update variant
-// DELETE /api/vendors/:id/inventory/:itemId/variants/:vid  — delete variant
-
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma }   from '@/lib/prisma';
@@ -11,46 +6,33 @@ import { withAuth } from '@/lib/auth';
 
 type Params = { id: string; itemId: string };
 
-// ── Helper: recalc parent totalQuantity from variants ─────────────────────────
 async function syncParentQty(itemId: string) {
-  const agg = await prisma.inventoryVariant.aggregate({
-    where:  { itemId },
-    _sum:   { totalQuantity: true },
-  });
-  await prisma.inventoryItem.update({
-    where: { id: itemId },
-    data:  { totalQuantity: agg._sum.totalQuantity ?? 0 },
-  });
+  const agg = await prisma.inventoryVariant.aggregate({ where: { itemId }, _sum: { totalQuantity: true } });
+  await prisma.inventoryItem.update({ where: { id: itemId }, data: { totalQuantity: agg._sum.totalQuantity ?? 0 } });
 }
 
-// ── Ownership check helper ────────────────────────────────────────────────────
 async function checkOwnership(vendorId: string, itemId: string, userId: string, role: string) {
   if (role === 'ADMIN') return true;
-  const item = await prisma.inventoryItem.findUnique({
-    where: { id: itemId }, select: { vendorId: true },
-  });
+  const item = await prisma.inventoryItem.findUnique({ where: { id: itemId }, select: { vendorId: true } });
   return item?.vendorId === vendorId;
 }
 
-// ── GET — list all variants ───────────────────────────────────────────────────
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Params }
-) {
-  const { itemId } = params;
+export async function GET(_req: NextRequest, { params }: { params: Promise<Params> }) {
+  const { itemId } = await params;
   try {
     const item = await prisma.inventoryItem.findUnique({
       where:   { id: itemId },
-      include: { variants: { orderBy: { name: 'asc' } } },
+      // FIX: was variants — relation name is InventoryVariant in schema
+      include: { InventoryVariant: { orderBy: { name: 'asc' } } },
     });
     if (!item) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
 
     return NextResponse.json({
-      itemId:       item.id,
-      itemName:     item.name,
-      hasVariants:  item.hasVariants,
+      itemId:        item.id,
+      itemName:      item.name,
+      hasVariants:   item.hasVariants,
       totalQuantity: item.totalQuantity,
-      variants:     item.variants,
+      variants:      item.InventoryVariant, // FIX: was item.variants
     });
   } catch (err) {
     console.error('[GET variants]', err);
@@ -58,11 +40,9 @@ export async function GET(
   }
 }
 
-// ── POST — add one or more variants ──────────────────────────────────────────
 export const POST = withAuth<Params>(
   async (req, { params }, user) => {
-    const { id, itemId } = params;
-
+    const { id, itemId } = await params;
     const owns = await checkOwnership(id, itemId, user.sub, user.role);
     if (!owns) return NextResponse.json({ error: 'Access denied' }, { status: 403 });
 
@@ -77,7 +57,6 @@ export const POST = withAuth<Params>(
 
       if (!Array.isArray(body.variants) || body.variants.length === 0)
         return NextResponse.json({ error: 'variants array required' }, { status: 400 });
-
       for (const v of body.variants) {
         if (!v.name || v.totalQuantity === undefined)
           return NextResponse.json({ error: 'Each variant needs name and totalQuantity' }, { status: 400 });
@@ -87,6 +66,9 @@ export const POST = withAuth<Params>(
         body.variants.map(v =>
           prisma.inventoryVariant.create({
             data: {
+              // FIX: InventoryVariant has no @default(uuid()) — must supply id + updatedAt
+              id:            crypto.randomUUID(),
+              updatedAt:     new Date(),
               itemId,
               name:          v.name.trim(),
               sku:           v.sku?.trim() ?? null,
@@ -103,11 +85,7 @@ export const POST = withAuth<Params>(
         )
       );
 
-      // Mark item as hasVariants and sync totalQuantity
-      await prisma.inventoryItem.update({
-        where: { id: itemId },
-        data:  { hasVariants: true },
-      });
+      await prisma.inventoryItem.update({ where: { id: itemId }, data: { hasVariants: true } });
       await syncParentQty(itemId);
 
       return NextResponse.json({ added: created.length, variants: created }, { status: 201 });

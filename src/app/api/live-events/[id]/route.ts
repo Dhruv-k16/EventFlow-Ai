@@ -1,7 +1,4 @@
 // src/app/api/live-events/[id]/route.ts
-// GET   /api/live-events/:id — full live event status dashboard
-// PATCH /api/live-events/:id — conclude a live event
-
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,8 +12,9 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
     const le = await prisma.liveEvent.findUnique({
       where:   { id },
       include: {
-        event:  { select: { id: true, name: true, startDate: true, endDate: true, location: true, guestCount: true } },
-        tasks:  { orderBy: { scheduledAt: 'asc' } },
+        // FIX: were event/tasks — relation names are Event/LiveTask in schema
+        Event:    { select: { id: true, name: true, startDate: true, endDate: true, location: true, guestCount: true } },
+        LiveTask: { orderBy: { scheduledAt: 'asc' } },
       },
     });
     if (!le) return NextResponse.json({ error: 'Live event not found' }, { status: 404 });
@@ -25,7 +23,8 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
       where: { liveEventId: id }, orderBy: { createdAt: 'desc' },
     });
 
-    const tasks   = le.tasks as TaskRow[];
+    // FIX: were le.tasks/le.event — now le.LiveTask/le.Event
+    const tasks   = le.LiveTask as TaskRow[];
     const incRows = incidents as IncidentRow[];
 
     const taskStats = {
@@ -46,8 +45,9 @@ export const GET = withAuth(async (_req: NextRequest, ctx) => {
     };
 
     return NextResponse.json({
-      id: le.id, eventId: le.eventId, event: le.event,
-      isActive: le.isActive,
+      id: le.id, eventId: le.eventId,
+      event:       le.Event, // FIX: was le.event
+      isActive:    le.isActive,
       startedAt:   le.startedAt.toISOString(),
       concludedAt: le.concludedAt?.toISOString() ?? null,
       taskStats, incidentStats,

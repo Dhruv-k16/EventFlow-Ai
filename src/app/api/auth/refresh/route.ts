@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       where: { id: decoded.sub },
       include: {
         vendorProfile:  { select: { id: true } },
-        plannerProfile: { select: { id: true } },
+        PlannerProfile: { select: { id: true } }, // FIX: was plannerProfile
       },
     });
 
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
 
     await revokeRefreshToken(refreshToken);
 
+    // FIX: use PlannerProfile (PascalCase) to match schema relation name
     const payload: JWTPayload = {
       sub:       user.id,
       email:     user.email,
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       firstName: user.firstName,
       lastName:  user.lastName,
       ...(user.vendorProfile  ? { vendorId:  user.vendorProfile.id  } : {}),
-      ...(user.plannerProfile ? { plannerId: user.plannerProfile.id } : {}),
+      ...(user.PlannerProfile ? { plannerId: user.PlannerProfile.id } : {}),
     };
 
     const newAccessToken  = signAccessToken(payload);
