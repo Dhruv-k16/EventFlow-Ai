@@ -112,7 +112,8 @@ model Event {
   planner          PlannerProfile?   @relation("PlannerEvents", fields: [plannerId], references: [id])
   FinancialSummary FinancialSummary?
   LiveEvent        LiveEvent?
-  staffAssignments StaffAssignment[]
+  staffAssignments        StaffAssignment[]
+  plannerStaffAssignments PlannerStaffAssignment[] @relation("StaffAssignments")
 
   @@index([clientId])
   @@index([plannerId])
@@ -342,7 +343,7 @@ model PlannerProfile {
   yearsExperience Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime  @updatedAt
-  eventsPlanned   Event[]  @relation("PlannerEvents")
+  eventsPlanned        Event[]              @relation("PlannerEvents")
   staff           PlannerStaff[]
   User            User     @relation(fields: [userId], references: [id])
 }
@@ -453,5 +454,24 @@ model PlannerStaff {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
+  assignments      PlannerStaffAssignment[]
+
   @@index([plannerProfileId, status])
+}
+
+// ── PLANNER STAFF ASSIGNMENTS ─────────────────────────────────────────────────
+
+model PlannerStaffAssignment {
+  id        String       @id @default(uuid())
+  staffId   String
+  staff     PlannerStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event        @relation("StaffAssignments", fields: [eventId], references: [id], onDelete: Cascade)
+  task      String?      // what they're responsible for e.g. "Coordinate catering"
+  notes     String?
+  createdAt DateTime     @default(now())
+
+  @@unique([staffId, eventId])
+  @@index([staffId])
+  @@index([eventId])
 }

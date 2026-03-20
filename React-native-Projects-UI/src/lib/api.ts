@@ -399,3 +399,41 @@ export const liveEvents = {
   reportIncident: (id: string, data: { title: string; severity?: string; description?: string; reportedBy?: string }) =>
     apiFetch<any>(`/api/live-events/${id}/incidents`, { method: 'POST', body: JSON.stringify(data) }),
 };
+// ── ADD THIS BLOCK to the bottom of src/lib/api.ts ───────────────────────────
+// Planner staff assignment endpoints
+
+export interface StaffAssignment {
+  id:          string;
+  task:        string | null;
+  notes:       string | null;
+  assignedAt:  string;
+  event: {
+    id:        string;
+    name:      string;
+    eventType: string | null;
+    startDate: string;
+    endDate?:  string;
+    location:  string | null;
+    venueName?: string | null;
+    type?:     string;
+  };
+}
+
+export const staffAssignments = {
+  list: (staffId: string) =>
+    apiFetch<{ staffId: string; staffName: string; total: number; assignments: StaffAssignment[] }>(
+      `/api/planner/staff/${staffId}/assignments`
+    ),
+
+  assign: (staffId: string, data: { eventId: string; task?: string; notes?: string }) =>
+    apiFetch<StaffAssignment>(
+      `/api/planner/staff/${staffId}/assignments`,
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  unassign: (staffId: string, assignmentId: string) =>
+    apiFetch<{ success: boolean }>(
+      `/api/planner/staff/${staffId}/assignments/${assignmentId}`,
+      { method: 'DELETE' }
+    ),
+};

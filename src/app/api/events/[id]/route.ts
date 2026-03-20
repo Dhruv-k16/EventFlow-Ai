@@ -104,7 +104,33 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       );
     }
 
+    // Collect all event IDs to delete (parent + all sub-events)
+    const subEventIds = (await prisma.event.findMany({
+      where: { parentId: id },
+      select: { id: true },
+    })).map(e => e.id);
+
+    const allIds = [id, ...subEventIds];
+
+    const bookingIds = (await prisma.booking.findMany({
+      where: { eventId: { in: allIds } },
+      select: { id: true },
+    })).map(b => b.id);
+
+    const liveEventIds = (await prisma.liveEvent.findMany({
+      where: { eventId: { in: allIds } },
+      select: { id: true },
+    })).map(l => l.id);
+
     await prisma.$transaction([
+      prisma.bookingItem.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.meetingRecord.deleteMany({ where: { bookingId: { in: bookingIds } } }),
+      prisma.booking.deleteMany({ where: { id: { in: bookingIds } } }),
+      prisma.plannerStaffAssignment.deleteMany({ where: { eventId: { in: allIds } } }),
+      prisma.liveTask.deleteMany({ where: { liveEventId: { in: liveEventIds } } }),
+      prisma.incident.deleteMany({ where: { liveEventId: { in: liveEventIds } } }),
+      prisma.liveEvent.deleteMany({ where: { id: { in: liveEventIds } } }),
+      prisma.financialSummary.deleteMany({ where: { eventId: { in: allIds } } }),
       prisma.event.deleteMany({ where: { parentId: id } }),
       prisma.event.delete({ where: { id } }),
     ]);

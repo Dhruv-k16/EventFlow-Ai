@@ -1,15 +1,17 @@
 // src/app/pages/planner/EventDetail.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import { motion } from 'motion/react';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import { SkeletonCard } from '../../components/shared/LoadingSpinner';
-import { Calendar, MapPin, Users, Clock, AlertTriangle, Plus, ExternalLink, LayoutGrid } from 'lucide-react';
+import { Calendar, MapPin, Users, Clock, AlertTriangle, Plus, ExternalLink, LayoutGrid, Trash2, Loader2 } from 'lucide-react';
 import { events as eventsApi, bookings as bookingsApi, type Event, type Booking } from '../../../lib/api';
 import { toast } from 'sonner';
 
 export const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab]           = useState('overview');
   const [loading, setLoading]               = useState(true);
   const [event, setEvent]                   = useState<Event | null>(null);
@@ -53,6 +55,19 @@ export const EventDetail: React.FC = () => {
 
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const handleDelete = async () => {
+    if (!confirm(`Delete "${event?.name}"? This cannot be undone.`)) return;
+    setDeleteLoading(true);
+    try {
+      await eventsApi.delete(id!);
+      toast.success('Event deleted');
+      navigate('/events', { replace: true });
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to delete event');
+      setDeleteLoading(false);
+    }
+  };
+
   const fmtCurrency = (n: string | null | undefined) =>
     n ? `₹${Number(n).toLocaleString('en-IN')}` : '—';
 
@@ -108,6 +123,9 @@ export const EventDetail: React.FC = () => {
               <Link to={`/risk/${id}`} className="px-4 py-2 border border-orange-200 text-orange-600 rounded-lg hover:bg-orange-50 transition-colors flex items-center gap-2">
                 <AlertTriangle size={16} /> View Risk
               </Link>
+              <button onClick={handleDelete} disabled={deleteLoading} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2 disabled:opacity-50">
+                {deleteLoading ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Delete
+              </button>
               <Link to="/bookings/new" className="px-4 py-2 gradient-purple-primary text-white rounded-lg hover:opacity-90 transition-all flex items-center gap-2">
                 <Plus size={16} /> Book Vendor
               </Link>
