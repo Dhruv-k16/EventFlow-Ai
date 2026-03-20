@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Brand Purple Scale */
+    --purple-900: #49225B;
+    --purple-800: #6E3482;
+    --purple-600: #A56ABD;
+    --purple-200: #E7DBEF;
+    --purple-100: #F3E8FF;
+    --purple-50: #F5EBFA;
+
+    /* Gray Scale */
+    --gray-900: #111827;
+    --gray-700: #374151;
+    --gray-500: #6B7280;
+    --gray-300: #D1D5DB;
+    --gray-100: #F3F4F6;
+
+    /* Semantic Colors */
+    --green-500: #10B981;
+    --amber-500: #F59E0B;
+    --orange-500: #F97316;
+    --red-500: #EF4444;
+    --blue-700: #1D4ED8;
+
+    /* Border Color */
+    --border: #D1D5DB;
+    
+    /* Background Color */
+    --background: #FFFFFF;
+
+    /* Gradients */
+    --gradient-purple-primary: linear-gradient(to right, #49225B, #A56ABD);
+    --gradient-purple-accent: linear-gradient(to bottom-right, #A56ABD, #ec4899);
+    --gradient-success: linear-gradient(to right, #059669, #10B981);
+    --gradient-danger: linear-gradient(to right, #DC2626, #EF4444);
+  }
+
+  body {
+    @apply bg-[#F5EBFA] text-gray-700 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-weight: 700;
+  }
+
+  h1 {
+    @apply text-2xl md:text-3xl text-gray-900;
+  }
+
+  h2 {
+    @apply text-xl md:text-2xl text-gray-900;
+  }
+
+  h3 {
+    @apply text-lg md:text-xl text-gray-900;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .gradient-purple-primary {
+    background: linear-gradient(to right, #49225B, #A56ABD);
+  }
+
+  .gradient-purple-accent {
+    background: linear-gradient(to bottom-right, #A56ABD, #ec4899);
+  }
+
+  .gradient-success {
+    background: linear-gradient(to right, #059669, #10B981);
+  }
+
+  .gradient-danger {
+    background: linear-gradient(to right, #DC2626, #EF4444);
+  }
+
+  .card-shadow {
+    box-shadow: 0 4px 6px rgba(73, 34, 91, 0.08), 0 2px 4px rgba(73, 34, 91, 0.04);
+  }
+
+  .card-shadow-hover {
+    box-shadow: 0 20px 40px rgba(73, 34, 91, 0.14), 0 8px 16px rgba(73, 34, 91, 0.08);
+  }
+
+  .spring-bounce {
+    transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .ios-sheet {
+    transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .pulse-glow {
+    animation: pulse-glow 2s infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.4);
+      opacity: 0.4;
+    }
+  }
+
+  .shimmer {
+    animation: shimmer 1.5s infinite;
+    background: linear-gradient(
+      90deg,
+      #f3f4f6 0%,
+      #e5e7eb 50%,
+      #f3f4f6 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+}

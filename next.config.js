@@ -1,11 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    // This allows your Expo app to talk to your Next.js server on Fedora
-    experimental: {
+  experimental: {
+    allowedDevOrigins: ["192.168.0.120", "localhost:3000"]
+  },
+  useFileSystemPublicRoutes: true,
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin',  value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,PATCH,DELETE,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ];
+  },
+};
 
-    },
-    // Ensure Next.js only looks in src/app for routes
-    useFileSystemPublicRoutes: true,
-  };
-  
-  module.exports = nextConfig;
+module.exports = nextConfig;
