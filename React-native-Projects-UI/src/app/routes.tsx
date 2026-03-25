@@ -32,6 +32,7 @@ const ClientVendorProfile = lazy(() => import("./pages/client/ClientVendorProfil
 const ClientBookVendor = lazy(() => import("./pages/client/ClientBookVendor").then(m => ({ default: m.ClientBookVendor })));
 const RiskDashboard = lazy(() => import("./pages/shared/RiskDashboard").then(m => ({ default: m.RiskDashboard })));
 const VendorRiskDashboard = lazy(() => import("./pages/vendor/VendorRiskDashboard").then(m => ({ default: m.VendorRiskDashboard })));
+const VendorCreateBooking = lazy(() => import("./pages/vendor/VendorCreateBooking").then(m => ({ default: m.VendorCreateBooking })));
 
 export const router = createBrowserRouter([
   {
@@ -124,6 +125,10 @@ export const router = createBrowserRouter([
       {
         path: "vendor/risk",
         Component: VendorRiskDashboard,
+      },
+      {
+        path: "vendor/bookings/new",
+        Component: VendorCreateBooking,
       },
       {
         path: "vendor/portfolio",

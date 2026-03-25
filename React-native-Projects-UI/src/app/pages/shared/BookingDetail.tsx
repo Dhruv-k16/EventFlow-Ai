@@ -88,6 +88,8 @@ export const BookingDetail: React.FC = () => {
   const canScheduleP1 = (isVendor || isPlanner) && booking.status === 'REQUESTED';
   const canScheduleP2 = (isVendor || isPlanner) && booking.status === 'CONFIRMATION_PENDING';
   const canCancel     = (isPlanner) && !['COMPLETED','CANCELLED','REJECTED_CAPACITY'].includes(booking.status);
+  const canReject     = isVendor && booking.status === 'REQUESTED';
+  const canVendorCancel = isVendor && ['MEETING_PHASE_1','CONFIRMATION_PENDING','MEETING_PHASE_2','CONFIRMED'].includes(booking.status);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -259,6 +261,22 @@ export const BookingDetail: React.FC = () => {
 
           {/* Cancel booking */}
           {canCancel && (
+            <button onClick={() => advanceStatus('CANCELLED')} disabled={actionLoading}
+              className="border border-red-200 text-red-600 px-6 py-3 rounded-xl font-semibold hover:bg-red-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+              Cancel Booking
+            </button>
+          )}
+
+          {canReject && (
+            <button onClick={() => advanceStatus('REJECTED_CAPACITY')} disabled={actionLoading}
+              className="border border-red-200 text-red-600 px-6 py-3 rounded-xl font-semibold hover:bg-red-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+              Reject Booking
+            </button>
+          )}
+
+          {canVendorCancel && (
             <button onClick={() => advanceStatus('CANCELLED')} disabled={actionLoading}
               className="border border-red-200 text-red-600 px-6 py-3 rounded-xl font-semibold hover:bg-red-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
               {actionLoading ? <Loader2 size={16} className="animate-spin" /> : null}

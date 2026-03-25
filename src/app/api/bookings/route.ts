@@ -64,7 +64,7 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
     console.error('[POST /api/bookings]', err);
     return NextResponse.json({ error: 'Booking creation failed' }, { status: 500 });
   }
-}, ['PLANNER', 'CLIENT']);
+}, ['PLANNER', 'CLIENT', 'VENDOR']);
 
 export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
   try {

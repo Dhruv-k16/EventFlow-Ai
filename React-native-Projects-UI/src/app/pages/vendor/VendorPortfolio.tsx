@@ -1,595 +1,326 @@
-import React, { useState } from 'react';
+// src/app/pages/vendor/VendorPortfolio.tsx
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Save, Plus, Trash2, Image as ImageIcon, Award, MapPin, DollarSign, Tag, FileText, Star } from 'lucide-react';
-
-interface PortfolioItem {
-  id: string;
-  title: string;
-  description: string;
-  eventType: string;
-  imageUrl: string;
-}
-
-interface ServiceOffered {
-  id: string;
-  name: string;
-}
+import { Save, Plus, Trash2, Loader2, Tag, X } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { vendor as vendorApi, type Vendor, type PortfolioItem } from '../../../lib/api';
+import { SkeletonCard } from '../../components/shared/LoadingSpinner';
+import { toast } from 'sonner';
 
 export const VendorPortfolio: React.FC = () => {
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const { user } = useAuth();
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [v, setV]                 = useState<Vendor | null>(null);
 
-  // Profile Data
   const [profileData, setProfileData] = useState({
-    businessName: 'Elegant Decor Co.',
-    category: 'Decor',
-    tagline: 'Transforming spaces into magical experiences',
-    about: 'Elegant Decor Co. transforms venues into magical spaces. We specialize in contemporary and traditional decor themes, bringing your vision to life with creativity and attention to detail.',
-    location: 'Mumbai, Maharashtra',
-    priceRangeMin: '50000',
-    priceRangeMax: '200000',
-    yearsExperience: '8',
-    contactEmail: 'contact@elegantdecor.com',
-    contactPhone: '+91 98765 43210',
-    website: 'www.elegantdecor.com'
+    tagline: '', location: '', priceRangeMin: '', priceRangeMax: '',
+    yearsInBusiness: '', email: '', phone: '', website: '', description: '',
   });
-
-  const [services, setServices] = useState<ServiceOffered[]>([
-    { id: '1', name: 'Stage Decoration' },
-    { id: '2', name: 'Floral Arrangements' },
-    { id: '3', name: 'Lighting Setup' },
-    { id: '4', name: 'Theme Decor' },
-    { id: '5', name: 'Entrance Arch' }
-  ]);
-
-  const [specialties, setSpecialties] = useState<string[]>([
-    'Wedding Decor',
-    'Corporate Events',
-    'Traditional Themes',
-    'Modern Minimalist',
-    'Luxury Setups'
-  ]);
-
-  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([
-    {
-      id: '1',
-      title: 'Modern Minimalist Wedding',
-      description: 'Contemporary white and gold theme with elegant floral arrangements',
-      eventType: 'Wedding',
-      imageUrl: 'placeholder1.jpg'
-    },
-    {
-      id: '2',
-      title: 'Traditional South Indian Decor',
-      description: 'Rich traditional setup with marigold flowers and cultural elements',
-      eventType: 'Wedding',
-      imageUrl: 'placeholder2.jpg'
-    },
-    {
-      id: '3',
-      title: 'Corporate Gala Setup',
-      description: 'Professional and sophisticated decor for corporate annual event',
-      eventType: 'Corporate',
-      imageUrl: 'placeholder3.jpg'
-    }
-  ]);
-
-  const [newService, setNewService] = useState('');
+  const [services, setServices]       = useState<string[]>([]);
+  const [specialties, setSpecialties] = useState<string[]>([]);
+  const [newService, setNewService]   = useState('');
   const [newSpecialty, setNewSpecialty] = useState('');
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [newItem, setNewItem] = useState({ title: '', description: '', eventType: '', imageUrl: '', tags: '' });
+  const [addingItem, setAddingItem]   = useState(false);
+  const [savingItem, setSavingItem]   = useState(false);
 
-  const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setProfileData({ ...profileData, [e.target.name]: e.target.value });
-  };
+  const vendorId = user?.vendorId;
 
-  const addService = () => {
-    if (newService.trim()) {
-      setServices([...services, { id: Date.now().toString(), name: newService.trim() }]);
-      setNewService('');
+  useEffect(() => {
+    if (!vendorId) return;
+    vendorApi.get(vendorId).then(data => {
+      setV(data);
+      setProfileData({
+        tagline:         data.tagline         ?? '',
+        location:        data.location        ?? '',
+        priceRangeMin:   data.priceRange?.split('-')[0]?.replace(/[^0-9]/g, '') ?? '',
+        priceRangeMax:   data.priceRange?.split('-')[1]?.replace(/[^0-9]/g, '') ?? '',
+        yearsInBusiness: String(data.yearsInBusiness ?? ''),
+        email:           data.email           ?? '',
+        phone:           data.phone           ?? '',
+        website:         data.website         ?? '',
+        description:     data.description     ?? '',
+      });
+      setServices(data.services ?? []);
+      setSpecialties(data.specialties ?? []);
+      setPortfolioItems(data.portfolioItems ?? []);
+    }).catch(() => toast.error('Failed to load profile'))
+      .finally(() => setLoading(false));
+  }, [vendorId]);
+
+  const handleSaveProfile = async () => {
+    if (!vendorId) return;
+    setSaving(true);
+    try {
+      const priceRange = profileData.priceRangeMin && profileData.priceRangeMax
+        ? `₹${Number(profileData.priceRangeMin).toLocaleString('en-IN')} - ₹${Number(profileData.priceRangeMax).toLocaleString('en-IN')}`
+        : undefined;
+
+      await vendorApi.update(vendorId, {
+        tagline:         profileData.tagline         || undefined,
+        location:        profileData.location        || undefined,
+        priceRange:      priceRange,
+        yearsInBusiness: profileData.yearsInBusiness ? parseInt(profileData.yearsInBusiness) : undefined,
+        email:           profileData.email           || undefined,
+        phone:           profileData.phone           || undefined,
+        website:         profileData.website         || undefined,
+        description:     profileData.description     || undefined,
+        services,
+        specialties,
+      });
+      toast.success('Profile saved!');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to save profile');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const removeService = (id: string) => {
-    setServices(services.filter(s => s.id !== id));
-  };
-
-  const addSpecialty = () => {
-    if (newSpecialty.trim() && !specialties.includes(newSpecialty.trim())) {
-      setSpecialties([...specialties, newSpecialty.trim()]);
-      setNewSpecialty('');
+  const addPortfolioItem = async () => {
+    if (!vendorId || !newItem.title.trim()) { toast.error('Title is required'); return; }
+    setSavingItem(true);
+    try {
+      const created = await vendorApi.addPortfolioItem(vendorId, {
+        title:       newItem.title.trim(),
+        description: newItem.description || undefined,
+        imageUrl:    newItem.imageUrl    || undefined,
+        eventType:   newItem.eventType   || undefined,
+        tags:        newItem.tags ? newItem.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      });
+      setPortfolioItems(prev => [...prev, created]);
+      setNewItem({ title: '', description: '', eventType: '', imageUrl: '', tags: '' });
+      setAddingItem(false);
+      toast.success('Portfolio item added');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to add item');
+    } finally {
+      setSavingItem(false);
     }
   };
 
-  const removeSpecialty = (specialty: string) => {
-    setSpecialties(specialties.filter(s => s !== specialty));
+  const deletePortfolioItem = async (portfolioId: string) => {
+    if (!vendorId || !confirm('Remove this portfolio item?')) return;
+    try {
+      await vendorApi.deletePortfolioItem(vendorId, portfolioId);
+      setPortfolioItems(prev => prev.filter(p => p.id !== portfolioId));
+      toast.success('Item removed');
+    } catch { toast.error('Failed to remove item'); }
   };
 
-  const addPortfolioItem = () => {
-    const newItem: PortfolioItem = {
-      id: Date.now().toString(),
-      title: '',
-      description: '',
-      eventType: '',
-      imageUrl: ''
-    };
-    setPortfolioItems([...portfolioItems, newItem]);
-  };
-
-  const updatePortfolioItem = (id: string, field: keyof PortfolioItem, value: string) => {
-    setPortfolioItems(portfolioItems.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
-  };
-
-  const removePortfolioItem = (id: string) => {
-    setPortfolioItems(portfolioItems.filter(item => item.id !== id));
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSaving(false);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
-  };
-
-  const categories = [
-    'Decor', 'Catering', 'AV', 'Venue', 'Transport', 
-    'Florals', 'Photography', 'Lighting', 'Entertainment', 'Other'
-  ];
+  if (loading) return <div className="space-y-6"><SkeletonCard /><SkeletonCard /></div>;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <motion.div 
-        initial={{ opacity: 0, y: -10 }} 
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
+    <div className="space-y-8 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#49225B] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            My Portfolio
+          <h1 className="text-3xl font-extrabold text-[#49225B]" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+            {v?.businessName ?? 'Your Profile'}
           </h1>
-          <p className="text-gray-500">Manage your marketplace profile and showcase your work</p>
+          <p className="text-gray-500 mt-1">{v?.category}</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-3 gradient-purple-primary text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          <Save size={20} />
-          {isSaving ? 'Saving...' : 'Save Changes'}
+        <button onClick={handleSaveProfile} disabled={saving}
+          className="gradient-purple-primary text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2">
+          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+          Save Profile
         </button>
-      </motion.div>
+      </div>
 
-      {/* Success Message */}
-      {showSuccess && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3"
-        >
-          <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-            <Star className="text-white fill-white" size={18} />
-          </div>
-          <div>
-            <p className="font-semibold text-green-900">Portfolio Updated!</p>
-            <p className="text-sm text-green-700">Your changes are now visible in the marketplace</p>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Basic Information */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-2xl shadow-md p-6 space-y-6"
-      >
-        <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-          Basic Information
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Business Name *
-            </label>
-            <input
-              type="text"
-              name="businessName"
-              value={profileData.businessName}
-              onChange={handleProfileChange}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Category *
-            </label>
-            <div className="relative">
-              <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <select
-                name="category"
-                value={profileData.category}
-                onChange={handleProfileChange}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-              >
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+      {/* Profile Info */}
+      <div className="bg-white rounded-2xl shadow-md p-6 space-y-5">
+        <h2 className="text-xl font-bold" style={{ fontFamily: 'Plus Jakarta Sans' }}>Business Details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: 'Tagline',         key: 'tagline',         placeholder: 'Your catchy tagline' },
+            { label: 'Location',        key: 'location',        placeholder: 'Mumbai, MH' },
+            { label: 'Email',           key: 'email',           placeholder: 'contact@yourbusiness.com' },
+            { label: 'Phone',           key: 'phone',           placeholder: '+91 98765 43210' },
+            { label: 'Website',         key: 'website',         placeholder: 'www.yourbusiness.com' },
+            { label: 'Years in Business', key: 'yearsInBusiness', placeholder: '8' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{f.label}</label>
+              <input type="text" value={(profileData as any)[f.key]}
+                onChange={e => setProfileData(p => ({ ...p, [f.key]: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
+                placeholder={f.placeholder} />
             </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Tagline
-            </label>
-            <input
-              type="text"
-              name="tagline"
-              value={profileData.tagline}
-              onChange={handleProfileChange}
-              placeholder="A brief catchy tagline for your business"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              About Your Business *
-            </label>
-            <div className="relative">
-              <FileText className="absolute left-4 top-4 text-gray-400" size={20} />
-              <textarea
-                name="about"
-                value={profileData.about}
-                onChange={handleProfileChange}
-                rows={4}
-                placeholder="Describe your business, experience, and what makes you unique..."
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all resize-none"
-              />
-            </div>
-          </div>
-
+          ))}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Location *
-            </label>
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                name="location"
-                value={profileData.location}
-                onChange={handleProfileChange}
-                placeholder="City, State"
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-              />
-            </div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Min Price (₹)</label>
+            <input type="number" value={profileData.priceRangeMin}
+              onChange={e => setProfileData(p => ({ ...p, priceRangeMin: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none transition-all"
+              placeholder="50000" />
           </div>
-
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Years of Experience *
-            </label>
-            <div className="relative">
-              <Award className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="number"
-                name="yearsExperience"
-                value={profileData.yearsExperience}
-                onChange={handleProfileChange}
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Min Price Range (₹) *
-            </label>
-            <div className="relative">
-              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="number"
-                name="priceRangeMin"
-                value={profileData.priceRangeMin}
-                onChange={handleProfileChange}
-                placeholder="50000"
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Max Price Range (₹) *
-            </label>
-            <div className="relative">
-              <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="number"
-                name="priceRangeMax"
-                value={profileData.priceRangeMax}
-                onChange={handleProfileChange}
-                placeholder="200000"
-                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-              />
-            </div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Max Price (₹)</label>
+            <input type="number" value={profileData.priceRangeMax}
+              onChange={e => setProfileData(p => ({ ...p, priceRangeMax: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none transition-all"
+              placeholder="200000" />
           </div>
         </div>
-      </motion.div>
-
-      {/* Contact Information */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-white rounded-2xl shadow-md p-6 space-y-6"
-      >
-        <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-          Contact Information
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email Address *
-            </label>
-            <input
-              type="email"
-              name="contactEmail"
-              value={profileData.contactEmail}
-              onChange={handleProfileChange}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Phone Number *
-            </label>
-            <input
-              type="tel"
-              name="contactPhone"
-              value={profileData.contactPhone}
-              onChange={handleProfileChange}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Website (Optional)
-            </label>
-            <input
-              type="url"
-              name="website"
-              value={profileData.website}
-              onChange={handleProfileChange}
-              placeholder="www.yourbusiness.com"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">About / Description</label>
+          <textarea value={profileData.description} rows={3}
+            onChange={e => setProfileData(p => ({ ...p, description: e.target.value }))}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none transition-all"
+            placeholder="Describe your business..." />
         </div>
-      </motion.div>
+      </div>
 
-      {/* Services Offered */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-white rounded-2xl shadow-md p-6 space-y-4"
-      >
-        <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-          Services Offered
-        </h2>
-
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newService}
-            onChange={(e) => setNewService(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addService()}
-            placeholder="Add a service..."
-            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-          />
-          <button
-            onClick={addService}
-            className="px-6 py-3 gradient-purple-primary text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center gap-2"
-          >
-            <Plus size={20} />
+      {/* Services */}
+      <div className="bg-white rounded-2xl shadow-md p-6">
+        <h2 className="text-xl font-bold mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>Services</h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {services.map((s, i) => (
+            <span key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm">
+              {s}
+              <button onClick={() => setServices(prev => prev.filter((_, j) => j !== i))}
+                className="text-gray-400 hover:text-red-500 transition-colors">
+                <X size={13} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input type="text" value={newService} onChange={e => setNewService(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && newService.trim()) { setServices(p => [...p, newService.trim()]); setNewService(''); } }}
+            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none transition-all text-sm"
+            placeholder="Add a service, press Enter" />
+          <button onClick={() => { if (newService.trim()) { setServices(p => [...p, newService.trim()]); setNewService(''); } }}
+            className="gradient-purple-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90">
             Add
           </button>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          {services.map(service => (
-            <div key={service.id} className="flex items-center gap-2 px-4 py-2 bg-[#F3E8FF] text-[#6E3482] rounded-lg">
-              <span className="font-semibold text-sm">{service.name}</span>
-              <button onClick={() => removeService(service.id)} className="hover:text-red-600">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+      </div>
 
       {/* Specialties */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white rounded-2xl shadow-md p-6 space-y-4"
-      >
-        <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-          Specialties & Expertise
-        </h2>
-
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newSpecialty}
-            onChange={(e) => setNewSpecialty(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addSpecialty()}
-            placeholder="Add a specialty..."
-            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-          />
-          <button
-            onClick={addSpecialty}
-            className="px-6 py-3 gradient-purple-primary text-white rounded-xl font-semibold hover:shadow-lg transition-all flex items-center gap-2"
-          >
-            <Plus size={20} />
+      <div className="bg-white rounded-2xl shadow-md p-6">
+        <h2 className="text-xl font-bold mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>Specialties</h2>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {specialties.map((s, i) => (
+            <span key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F3E8FF] text-[#6E3482] rounded-lg text-sm font-medium">
+              {s}
+              <button onClick={() => setSpecialties(prev => prev.filter((_, j) => j !== i))}
+                className="text-[#A56ABD] hover:text-red-500 transition-colors">
+                <X size={13} />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input type="text" value={newSpecialty} onChange={e => setNewSpecialty(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && newSpecialty.trim()) { setSpecialties(p => [...p, newSpecialty.trim()]); setNewSpecialty(''); } }}
+            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none transition-all text-sm"
+            placeholder="Add a specialty, press Enter" />
+          <button onClick={() => { if (newSpecialty.trim()) { setSpecialties(p => [...p, newSpecialty.trim()]); setNewSpecialty(''); } }}
+            className="gradient-purple-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90">
             Add
           </button>
         </div>
+      </div>
 
-        <div className="flex flex-wrap gap-2">
-          {specialties.map(specialty => (
-            <div key={specialty} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg">
-              <span className="font-semibold text-sm">{specialty}</span>
-              <button onClick={() => removeSpecialty(specialty)} className="hover:text-red-600">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Portfolio Items */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-white rounded-2xl shadow-md p-6 space-y-6"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            Portfolio Gallery
+      {/* Portfolio */}
+      <div className="bg-white rounded-2xl shadow-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+            Portfolio ({portfolioItems.length})
           </h2>
-          <button
-            onClick={addPortfolioItem}
-            className="flex items-center gap-2 px-4 py-2 border-2 border-[#6E3482] text-[#6E3482] rounded-xl font-semibold hover:bg-[#F3E8FF] transition-all"
-          >
-            <Plus size={20} />
-            Add Item
+          <button onClick={() => setAddingItem(true)}
+            className="flex items-center gap-2 gradient-purple-primary text-white px-4 py-2 rounded-xl font-semibold text-sm hover:opacity-90">
+            <Plus size={16} /> Add Item
           </button>
         </div>
 
-        <div className="space-y-6">
-          {portfolioItems.map((item, index) => (
-            <div key={item.id} className="border border-gray-200 rounded-xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-gray-900">Portfolio Item {index + 1}</h3>
-                <button
-                  onClick={() => removePortfolioItem(item.id)}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <Trash2 size={20} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Project Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={item.title}
-                    onChange={(e) => updatePortfolioItem(item.id, 'title', e.target.value)}
-                    placeholder="e.g., Modern Minimalist Wedding"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Event Type *
-                  </label>
-                  <input
-                    type="text"
-                    value={item.eventType}
-                    onChange={(e) => updatePortfolioItem(item.id, 'eventType', e.target.value)}
-                    placeholder="e.g., Wedding, Corporate, Birthday"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Description *
-                  </label>
-                  <textarea
-                    value={item.description}
-                    onChange={(e) => updatePortfolioItem(item.id, 'description', e.target.value)}
-                    rows={3}
-                    placeholder="Describe this project..."
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-[#A56ABD] focus:ring-4 focus:ring-[#F3E8FF]/50 outline-none transition-all resize-none"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Image
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-[#A56ABD] transition-colors cursor-pointer">
-                    <ImageIcon className="mx-auto mb-3 text-gray-400" size={48} />
-                    <p className="text-sm text-gray-600 mb-1">Click to upload or drag and drop</p>
-                    <p className="text-xs text-gray-400">PNG, JPG up to 10MB</p>
-                  </div>
-                </div>
-              </div>
+        {/* Add item form */}
+        {addingItem && (
+          <div className="bg-[#F3E8FF] rounded-xl p-5 mb-5 space-y-3">
+            <h3 className="font-bold text-sm">New Portfolio Item</h3>
+            <input type="text" value={newItem.title} onChange={e => setNewItem(p => ({ ...p, title: e.target.value }))}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none text-sm"
+              placeholder="Title *" />
+            <input type="text" value={newItem.description} onChange={e => setNewItem(p => ({ ...p, description: e.target.value }))}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none text-sm"
+              placeholder="Description" />
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Image</label>
+              <input type="file" accept="image/*"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setNewItem(p => ({ ...p, imageUrl: ev.target?.result as string }));
+                  reader.readAsDataURL(file);
+                }}
+                className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#6E3482] file:text-white hover:file:opacity-90 cursor-pointer border border-gray-200 rounded-xl p-1.5" />
+              {newItem.imageUrl && (
+                <img src={newItem.imageUrl} alt="preview" className="mt-2 h-24 w-full object-cover rounded-xl border border-gray-200" />
+              )}
             </div>
-          ))}
-        </div>
-
-        {portfolioItems.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <ImageIcon className="mx-auto mb-3 text-gray-300" size={64} />
-            <p>No portfolio items yet. Add your first project to showcase your work!</p>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={newItem.eventType} onChange={e => setNewItem(p => ({ ...p, eventType: e.target.value }))}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none text-sm"
+                placeholder="Event type (e.g. Wedding)" />
+              <input type="text" value={newItem.tags} onChange={e => setNewItem(p => ({ ...p, tags: e.target.value }))}
+                className="px-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#A56ABD] outline-none text-sm"
+                placeholder="Tags (comma-separated)" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setAddingItem(false); setNewItem({ title: '', description: '', eventType: '', imageUrl: '', tags: '' }); }}
+                className="flex-1 border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={addPortfolioItem} disabled={savingItem}
+                className="flex-1 gradient-purple-primary text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingItem ? <Loader2 size={16} className="animate-spin" /> : null} Save Item
+              </button>
+            </div>
           </div>
         )}
-      </motion.div>
 
-      {/* Preview Note */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-        className="bg-gradient-to-r from-[#F3E8FF] to-[#E9D5FF] rounded-xl p-6"
-      >
-        <div className="flex items-start gap-4">
-          <div className="text-3xl">💡</div>
-          <div>
-            <h3 className="font-bold text-[#49225B] mb-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
-              Portfolio Tips
-            </h3>
-            <ul className="text-sm text-gray-700 space-y-1">
-              <li>• Add high-quality images of your best work to attract more clients</li>
-              <li>• Keep your description clear and highlight what makes you unique</li>
-              <li>• Update your portfolio regularly with recent projects</li>
-              <li>• Accurate pricing helps clients find services within their budget</li>
-              <li>• List all services you offer to appear in more searches</li>
-            </ul>
+        {portfolioItems.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No portfolio items yet. Add your first work!</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {portfolioItems.map(item => (
+              <motion.div key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="border border-gray-200 rounded-xl overflow-hidden group">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.title} className="w-full h-40 object-cover" />
+                ) : (
+                  <div className="w-full h-40 gradient-purple-accent flex items-center justify-center">
+                    <span className="text-white font-bold text-3xl">{item.title[0]}</span>
+                  </div>
+                )}
+                <div className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="font-bold text-sm">{item.title}</p>
+                      {item.eventType && <p className="text-xs text-gray-500 mt-0.5">{item.eventType}</p>}
+                      {item.description && <p className="text-xs text-gray-600 mt-1 line-clamp-2">{item.description}</p>}
+                      {item.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {item.tags.map((t, i) => (
+                            <span key={i} className="text-xs bg-[#F3E8FF] text-[#6E3482] px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <Tag size={9} /> {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => deletePortfolioItem(item.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 ml-2 transition-all">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
-        </div>
-      </motion.div>
-
-      {/* Save Button (Bottom) */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-8 py-4 gradient-purple-primary text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          <Save size={20} />
-          {isSaving ? 'Saving Changes...' : 'Save Portfolio'}
-        </button>
+        )}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
   UserCheck,
   ClipboardList,
   Briefcase,
+  PlusCircle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -78,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const getVendorNav = () => (
     <>
       <NavItem to="/vendor/dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" exact />
+      <NavItem to="/vendor/bookings/new" icon={<PlusCircle size={18} />} label="Create Booking" />
       <NavItem to="/vendor/portfolio" icon={<Briefcase size={18} />} label="My Portfolio" />
       <NavItem to="/bookings" icon={<ClipboardList size={18} />} label="Bookings" />
       
