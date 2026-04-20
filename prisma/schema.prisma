@@ -18,7 +18,8 @@ model User {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   eventsOwned    Event[]         @relation("ClientEvents")
-  PlannerProfile PlannerProfile?
+  hireRequests      PlannerHireRequest[] @relation("ClientHireRequests")
+  PlannerProfile    PlannerProfile?
   RefreshToken   RefreshToken[]
   vendorProfile  Vendor?         @relation("UserToVendor")
 
@@ -112,8 +113,8 @@ model Event {
   planner          PlannerProfile?   @relation("PlannerEvents", fields: [plannerId], references: [id])
   FinancialSummary FinancialSummary?
   LiveEvent        LiveEvent?
-  staffAssignments        StaffAssignment[]
-  plannerStaffAssignments PlannerStaffAssignment[] @relation("StaffAssignments")
+  staffAssignments StaffAssignment[]
+  hireRequests            PlannerHireRequest[] @relation("EventHireRequests")
 
   @@index([clientId])
   @@index([plannerId])
@@ -147,9 +148,12 @@ model Booking {
   status          BookingStatus   @default(REQUESTED)
   eventId         String
   vendorId        String
-  totalCost       Decimal         @default(0) @db.Decimal(12, 2)
-  depositPaid     Decimal         @default(0) @db.Decimal(12, 2)
-  notes           String?
+  totalCost                Decimal         @default(0) @db.Decimal(12, 2)
+  depositPaid              Decimal         @default(0) @db.Decimal(12, 2)
+  notes                    String?
+  cancellationRequested    Boolean         @default(false)
+  cancellationReason       String?
+  cancellationRequestedAt  DateTime?
   rejectionReason String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -343,8 +347,9 @@ model PlannerProfile {
   yearsExperience Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime  @updatedAt
-  eventsPlanned        Event[]              @relation("PlannerEvents")
+  eventsPlanned   Event[]  @relation("PlannerEvents")
   staff           PlannerStaff[]
+  hireRequests    PlannerHireRequest[] @relation("PlannerHireRequests")
   User            User     @relation(fields: [userId], references: [id])
 }
 
@@ -454,24 +459,28 @@ model PlannerStaff {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
-  assignments      PlannerStaffAssignment[]
-
   @@index([plannerProfileId, status])
 }
 
-// ── PLANNER STAFF ASSIGNMENTS ─────────────────────────────────────────────────
+enum HireRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
 
-model PlannerStaffAssignment {
-  id        String       @id @default(uuid())
-  staffId   String
-  staff     PlannerStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+model PlannerHireRequest {
+  id        String            @id @default(uuid())
+  clientId  String
+  client    User              @relation("ClientHireRequests", fields: [clientId], references: [id], onDelete: Cascade)
+  plannerId String
+  planner   PlannerProfile    @relation("PlannerHireRequests", fields: [plannerId], references: [id], onDelete: Cascade)
   eventId   String
-  event     Event        @relation("StaffAssignments", fields: [eventId], references: [id], onDelete: Cascade)
-  task      String?      // what they're responsible for e.g. "Coordinate catering"
+  event     Event             @relation("EventHireRequests", fields: [eventId], references: [id], onDelete: Cascade)
+  status    HireRequestStatus @default(PENDING)
   notes     String?
-  createdAt DateTime     @default(now())
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
-  @@unique([staffId, eventId])
-  @@index([staffId])
-  @@index([eventId])
+  @@unique([clientId, eventId])
+  @@index([plannerId, status])
 }

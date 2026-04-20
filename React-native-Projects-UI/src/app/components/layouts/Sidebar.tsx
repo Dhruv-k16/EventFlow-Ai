@@ -79,7 +79,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const getVendorNav = () => (
     <>
       <NavItem to="/vendor/dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" exact />
-      <NavItem to="/vendor/bookings/new" icon={<PlusCircle size={18} />} label="Create Booking" />
       <NavItem to="/vendor/portfolio" icon={<Briefcase size={18} />} label="My Portfolio" />
       <NavItem to="/bookings" icon={<ClipboardList size={18} />} label="Bookings" />
       
@@ -96,7 +95,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const getClientNav = () => (
     <>
       <NavItem to="/client/dashboard" icon={<LayoutDashboard size={18} />} label="Dashboard" exact />
+      <NavItem to="/client/create-event" icon={<PlusCircle size={18} />} label="Create Event" />
       <NavItem to="/client/events" icon={<Calendar size={18} />} label="My Events" />
+      <NavItem to="/client/marketplace" icon={<ShoppingBag size={18} />} label="Marketplace" />
       <NavItem to="/bookings" icon={<ClipboardList size={18} />} label="Bookings" />
       <NavItem to="/client/financials" icon={<DollarSign size={18} />} label="Financials" />
     </>

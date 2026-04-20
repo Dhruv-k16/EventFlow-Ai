@@ -7,10 +7,10 @@ export const ClientEventTypeSelection: React.FC = () => {
   const navigate = useNavigate();
 
   const handleSelection = (type: 'planner' | 'vendor') => {
-    // Store the selection type
     sessionStorage.setItem('clientSelectionType', type);
-    // Navigate to marketplace with type filter
-    navigate(`/client/marketplace?type=${type}`);
+    const eventId = sessionStorage.getItem('newEventId');
+    const qs = eventId ? `?type=${type}&eventId=${eventId}` : `?type=${type}`;
+    navigate(`/client/marketplace${qs}`);
   };
 
   return (
