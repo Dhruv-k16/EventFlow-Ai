@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       if (role === 'PLANNER') {
         const planner = await tx.plannerProfile.create({
           // FIX: PlannerProfile has no @default(uuid()) — must supply id + updatedAt
-          data: { id: crypto.randomUUID(), userId: user.id, updatedAt: new Date() },
+          data: { id: crypto.randomUUID(), userId: user.id, businessName: businessName ?? `${firstName} ${lastName}`, updatedAt: new Date() },
         });
         plannerId = planner.id;
       }
