@@ -9,7 +9,9 @@
     "ios": "npx expo run:ios --project expo-app",
     "web": "npx expo start expo-app --web",
     "lint": "next lint && npx expo lint expo-app",
-    "reset-project": "node ./scripts/reset-project.js"
+    "reset-project": "node ./scripts/reset-project.js",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
