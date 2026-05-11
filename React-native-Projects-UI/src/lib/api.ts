@@ -622,3 +622,64 @@ export const staffAssignments = {
       { method: "DELETE" },
     ),
 };
+
+// ── Planner marketplace (client-facing) ───────────────────────────────────────
+
+export interface PlannerProfile {
+  id:              string;
+  businessName:    string;
+  bio:             string | null;
+  yearsExperience: number | null;
+  eventsManaged:   number;
+  email:           string;
+  firstName:       string;
+  lastName:        string;
+  specialties?:    string[];
+}
+
+export const planners = {
+  list: (q?: string) =>
+    apiFetch<{ planners: PlannerProfile[] }>(`/api/planners${q ? '?q=' + encodeURIComponent(q) : ''}`),
+
+  get: (id: string) =>
+    apiFetch<PlannerProfile>(`/api/planners/${id}`),
+
+  sendHireRequest: (eventId: string, data: { plannerId: string; notes?: string }) =>
+    apiFetch<{ request: { id: string; status: string } }>(
+      `/api/events/${eventId}/hire-planner`,
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  getHireRequest: (eventId: string) =>
+    apiFetch<{ request: { id: string; status: string; planner: { businessName: string } } | null }>(
+      `/api/events/${eventId}/hire-planner`
+    ),
+
+  listHireRequests: () =>
+    apiFetch<{ requests: any[] }>('/api/planners/hire/requests'),
+
+  respondToHireRequest: (requestId: string, action: 'accept' | 'reject') =>
+    apiFetch<{ status: string; message: string }>(
+      `/api/planners/hire/${requestId}`,
+      { method: 'PATCH', body: JSON.stringify({ action }) }
+    ),
+};
+
+// ── Client booking cancellation ───────────────────────────────────────────────
+
+export const cancellation = {
+  request: (bookingId: string, reason: string) =>
+    apiFetch<{ booking: Booking; directlyCancelled: boolean; message?: string }>(
+      `/api/bookings/${bookingId}/cancel-request`,
+      { method: 'POST', body: JSON.stringify({ reason }) }
+    ),
+
+  withdraw: (bookingId: string) =>
+    apiFetch<{ success: boolean }>(`/api/bookings/${bookingId}/cancel-request`, { method: 'DELETE' }),
+
+  vendorRespond: (bookingId: string, action: 'approve' | 'reject') =>
+    apiFetch<{ booking: Booking; message: string }>(
+      `/api/bookings/${bookingId}/cancel-approve`,
+      { method: 'PATCH', body: JSON.stringify({ action }) }
+    ),
+};
